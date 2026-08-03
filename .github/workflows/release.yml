@@ -65,17 +65,22 @@ jobs:
           # When neither is set this is empty, and .goreleaser.yml skips the
           # cask rather than failing the release.
           HOMEBREW_GITHUB_TOKEN: ${{ secrets.HOMEBREW_GITHUB_TOKEN || secrets.PAT_TOKEN }}
-          # Publishing to winget means opening a pull request against
-          # microsoft/winget-pkgs from a fork under this account. That needs a
-          # PAT with contents:write and pull-requests:write on the fork; the
-          # default GITHUB_TOKEN can do neither.
+          # Publishing to winget is two operations against two different
+          # repositories: push a branch to the fork (adedayo/winget-pkgs), then
+          # open a pull request on the upstream (microsoft/winget-pkgs).
           #
-          # HOMEBREW_GITHUB_TOKEN is the last fallback because the fine-grained
-          # token behind it covers both adedayo/homebrew-tap and
-          # adedayo/winget-pkgs. One token, one expiry to track. Setting
-          # WINGET_GITHUB_TOKEN separately later takes precedence and splits
-          # the two publishing paths without touching this file.
+          # This *must* be a classic PAT carrying the `public_repo` scope. A
+          # fine-grained token cannot do it, however its permissions are set:
+          # such a token only acts on repositories owned by the accounts it was
+          # scoped to, so the push to the fork succeeds and the pull request on
+          # microsoft/winget-pkgs comes back as
+          #   403 Resource not accessible by personal access token
+          # which is exactly how the v1.1.1 release failed.
           #
-          # When none are set this is empty, and .goreleaser.yml skips the
-          # winget pipe rather than failing the release.
-          WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN || secrets.PAT_TOKEN || secrets.HOMEBREW_GITHUB_TOKEN }}
+          # There is deliberately no fallback to PAT_TOKEN or
+          # HOMEBREW_GITHUB_TOKEN here: those are fine-grained, and inheriting
+          # them would reintroduce that failure at the very last step of a
+          # release, after everything else has already published. When
+          # WINGET_GITHUB_TOKEN is unset this is empty, and .goreleaser.yml
+          # skips the winget pipe rather than failing the release.
+          WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}

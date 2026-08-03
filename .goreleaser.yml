@@ -192,6 +192,15 @@ dockers_v2:
 # automation. That requires a fork of winget-pkgs under this account, and a
 # token that can push to it and open pull requests.
 #
+# The token must be a *classic* PAT with the `public_repo` scope. A
+# fine-grained token is not sufficient and cannot be made sufficient: it only
+# acts on repositories owned by the accounts it was scoped to, so it pushes
+# the branch to the fork happily and then fails to open the pull request on
+# microsoft/winget-pkgs with `403 Resource not accessible by personal access
+# token`. Note that the branch is pushed before the PR is attempted, so after
+# such a failure the manifests are already on the fork and the pull request
+# can be opened by hand for that version.
+#
 # Because the fork and token are prerequisites that may not be in place, the
 # whole pipe is skipped when the token is absent rather than failing the
 # release. The first successful run opens a PR; it is not merged
