@@ -2,11 +2,12 @@ package scanner
 
 import (
 	"context"
-	"crypto/tls"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	d "github.com/adedayo/vantage/pkg"
 )
 
 // takeoverHTTPTimeout bounds a single corroboration request. An unclaimed name
@@ -55,7 +56,7 @@ type TakeoverCorroboration struct {
 // than to HTTPS with verification disabled, because the request carries nothing
 // worth protecting and pretending to have validated a certificate would be
 // worse than plainly not using one.
-func CorroborateTakeover(ctx context.Context, host string, fingerprints []string) TakeoverCorroboration {
+func CorroborateTakeover(ctx context.Context, hc d.Doer, host string, fingerprints []string) TakeoverCorroboration {
 	if len(fingerprints) == 0 {
 		// Nothing to look for. Reporting this as "fetched, no match" would let
 		// the caller conclude the name is in use on the strength of a question
@@ -63,18 +64,9 @@ func CorroborateTakeover(ctx context.Context, host string, fingerprints []string
 		return TakeoverCorroboration{Error: "no HTTP fingerprints declared for this service"}
 	}
 
-	client := &http.Client{
-		Timeout: takeoverHTTPTimeout,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			// A redirect off the host would have us fingerprinting somebody
-			// else's page and attributing the verdict to this name.
-			return http.ErrUseLastResponse
-		},
-		Transport: &http.Transport{
-			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
-			DisableKeepAlives: true,
-		},
-	}
+	// Redirects are not followed: a redirect off the host would have us
+	// fingerprinting somebody else's page and attributing the verdict here.
+	client := d.HTTPOr(hc, d.HTTPOptions{Timeout: takeoverHTTPTimeout})
 
 	var lastErr string
 	for _, url := range []string{"https://" + host + "/", "http://" + host + "/"} {
@@ -96,7 +88,7 @@ func CorroborateTakeover(ctx context.Context, host string, fingerprints []string
 }
 
 // fetchBody performs the bounded GET.
-func fetchBody(ctx context.Context, client *http.Client, url string) (string, int, error) {
+func fetchBody(ctx context.Context, client d.Doer, url string) (string, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", 0, err

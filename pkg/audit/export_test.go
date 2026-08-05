@@ -3,6 +3,7 @@ package audit
 import (
 	"context"
 
+	d "github.com/adedayo/vantage/pkg"
 	"github.com/adedayo/vantage/pkg/ct"
 	"github.com/adedayo/vantage/pkg/scanner"
 )
@@ -15,7 +16,7 @@ import (
 // The alternative — a name under the audited domain resolving to a server the
 // test controls — cannot be arranged without either real DNS or a resolver
 // override that would test the mock rather than the wiring.
-func SetCorroborator(fn func(ctx context.Context, host string, fingerprints []string) scanner.TakeoverCorroboration) func() {
+func SetCorroborator(fn func(ctx context.Context, hc d.Doer, host string, fingerprints []string) scanner.TakeoverCorroboration) func() {
 	previous := corroborate
 	corroborate = fn
 	return func() { corroborate = previous }

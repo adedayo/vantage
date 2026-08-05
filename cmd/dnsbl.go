@@ -23,7 +23,7 @@ hosts and identifying compromised or abused IP space.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
-		listed, err := scanner.CheckDNSBL(ctx, args[0], dnsblBlocklist)
+		listed, err := scanner.CheckDNSBL(ctx, dnsClient, args[0], dnsblBlocklist)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return err

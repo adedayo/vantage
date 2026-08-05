@@ -20,7 +20,7 @@ hierarchy for SMTP transport security.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
-		result, err := scanner.LookupTLASSMTP(ctx, args[0])
+		result, err := scanner.LookupTLASSMTP(ctx, dnsClient, args[0])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return err

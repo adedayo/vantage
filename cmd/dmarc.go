@@ -56,8 +56,10 @@ reported.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runRecordCheck(context.Background(), args[0], recordCheck{
-			name:     "dmarc",
-			retrieve: scanner.LookupDMARCRecordsFrom,
+			name: "dmarc",
+			retrieve: func(ctx context.Context, target string) ([]string, string, error) {
+				return scanner.LookupDMARCRecordsFrom(ctx, dnsClient, target)
+			},
 			analyse: func(ctx context.Context, o analyse.Origin, records []string) []finding.Finding {
 				return analyse.DMARCFull(ctx, o, scanner.DMARCResolver{}, records,
 					scanner.OrganisationalDomain(o.Target))

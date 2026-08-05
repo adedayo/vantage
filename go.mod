@@ -1,6 +1,6 @@
 module github.com/adedayo/vantage
 
-go 1.25.0
+go 1.26.1
 
 require (
 	github.com/miekg/dns v1.1.72

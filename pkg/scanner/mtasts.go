@@ -33,11 +33,21 @@ const maxPolicySize = 64 * 1024
 // A failure to retrieve or validate is reported in the returned policy rather
 // than as an error, because "the policy is unreachable" is a finding about the
 // domain, not a failure of the tool.
-func FetchMTASTSPolicy(ctx context.Context, domain string) analyse.MTASTSPolicy {
+func FetchMTASTSPolicy(ctx context.Context, r d.Resolver, hc d.Doer, domain string) analyse.MTASTSPolicy {
 	domain = strings.TrimSuffix(strings.TrimSpace(domain), ".")
 	url := "https://mta-sts." + domain + "/.well-known/mta-sts.txt"
 
-	timeout := d.TotalTimeout()
+	// The resolver's own budget is used when it exposes one, so that a caller
+	// who slowed DNS down for a lossy link gets the same patience here.
+	//
+	// The assertion is checked. Resolver does not require TotalTimeout, and an
+	// embedding consumer's wrapper — a scope guard, say — has no reason to
+	// forward it; asserting unconditionally would panic on exactly the
+	// implementations this library exists to accept.
+	timeout := d.DefaultTotalTimeout
+	if budgeted, ok := r.(interface{ TotalTimeout() time.Duration }); ok {
+		timeout = budgeted.TotalTimeout()
+	}
 	if deadline, ok := ctx.Deadline(); ok {
 		if remaining := time.Until(deadline); remaining < timeout {
 			timeout = remaining
@@ -50,16 +60,7 @@ func FetchMTASTSPolicy(ctx context.Context, domain string) analyse.MTASTSPolicy 
 		}
 	}
 
-	client := &http.Client{
-		Timeout: timeout,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-		Transport: &http.Transport{
-			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
-			DisableKeepAlives: true,
-		},
-	}
+	client := d.HTTPOr(hc, d.HTTPOptions{Timeout: timeout})
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

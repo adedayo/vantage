@@ -21,7 +21,7 @@ func TestCorroborateTakeoverFindsClaimMePage(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	res := CorroborateTakeover(context.Background(), hostOf(srv.URL),
+	res := CorroborateTakeover(context.Background(), nil, hostOf(srv.URL),
 		[]string{"There isn't a GitHub Pages site here."})
 
 	assert.True(t, res.Fetched)
@@ -39,7 +39,7 @@ func TestCorroborateTakeoverMatchesCaseInsensitively(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	res := CorroborateTakeover(context.Background(), hostOf(srv.URL), []string{"nosuchbucket"})
+	res := CorroborateTakeover(context.Background(), nil, hostOf(srv.URL), []string{"nosuchbucket"})
 	assert.True(t, res.Unclaimed)
 }
 
@@ -51,7 +51,7 @@ func TestCorroborateTakeoverLiveSiteIsNotUnclaimed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	res := CorroborateTakeover(context.Background(), hostOf(srv.URL), []string{"NoSuchBucket"})
+	res := CorroborateTakeover(context.Background(), nil, hostOf(srv.URL), []string{"NoSuchBucket"})
 	assert.True(t, res.Fetched)
 	assert.False(t, res.Unclaimed)
 }
@@ -64,7 +64,7 @@ func TestCorroborateTakeoverUnreachableHostEstablishesNothing(t *testing.T) {
 	defer cancel()
 
 	// Reserved for documentation use (RFC 5737) and therefore never routable.
-	res := CorroborateTakeover(ctx, "192.0.2.1:1", []string{"NoSuchBucket"})
+	res := CorroborateTakeover(ctx, nil, "192.0.2.1:1", []string{"NoSuchBucket"})
 	assert.False(t, res.Fetched)
 	assert.False(t, res.Unclaimed)
 	assert.NotEmpty(t, res.Error)
@@ -73,7 +73,7 @@ func TestCorroborateTakeoverUnreachableHostEstablishesNothing(t *testing.T) {
 // A service with no declared body fingerprints cannot be corroborated at all.
 // Returning "fetched, no match" would answer a question that was never put.
 func TestCorroborateTakeoverWithoutFingerprintsDoesNotFetch(t *testing.T) {
-	res := CorroborateTakeover(context.Background(), "example.com", nil)
+	res := CorroborateTakeover(context.Background(), nil, "example.com", nil)
 	assert.False(t, res.Fetched)
 	assert.NotEmpty(t, res.Error)
 }
@@ -91,7 +91,7 @@ func TestCorroborateTakeoverDoesNotFollowRedirects(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	res := CorroborateTakeover(context.Background(), hostOf(srv.URL), []string{"NoSuchBucket"})
+	res := CorroborateTakeover(context.Background(), nil, hostOf(srv.URL), []string{"NoSuchBucket"})
 	require.True(t, res.Fetched)
 	assert.False(t, res.Unclaimed)
 	assert.Equal(t, http.StatusFound, res.Status)
@@ -106,7 +106,7 @@ func TestCorroborateTakeoverBoundsTheBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	res := CorroborateTakeover(context.Background(), hostOf(srv.URL), []string{"NoSuchBucket"})
+	res := CorroborateTakeover(context.Background(), nil, hostOf(srv.URL), []string{"NoSuchBucket"})
 	assert.True(t, res.Fetched)
 	assert.False(t, res.Unclaimed, "the fingerprint past the read limit must not be matched")
 }

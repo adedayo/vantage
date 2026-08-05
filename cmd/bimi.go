@@ -27,8 +27,10 @@ are checked rather than assumed.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runRecordCheck(context.Background(), args[0], recordCheck{
-			name:     "bimi",
-			retrieve: scanner.LookupBIMIRecordsFrom,
+			name: "bimi",
+			retrieve: func(ctx context.Context, target string) ([]string, string, error) {
+				return scanner.LookupBIMIRecordsFrom(ctx, dnsClient, target)
+			},
 			analyse: func(ctx context.Context, o analyse.Origin, records []string) []finding.Finding {
 				return analyse.BIMI(o, records, dmarcEnforcing(ctx, o.Target))
 			},
@@ -44,7 +46,7 @@ are checked rather than assumed.`,
 // dmarcEnforcing reports whether the domain publishes a quarantine or reject
 // DMARC policy, which BIMI requires before any logo is displayed.
 func dmarcEnforcing(ctx context.Context, domain string) bool {
-	records, _, err := scanner.LookupDMARCRecordsFrom(ctx, domain)
+	records, _, err := scanner.LookupDMARCRecordsFrom(ctx, dnsClient, domain)
 	if err != nil {
 		return false
 	}

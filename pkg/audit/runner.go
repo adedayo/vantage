@@ -11,6 +11,7 @@ import (
 	vantage "github.com/adedayo/vantage/pkg"
 	"github.com/adedayo/vantage/pkg/analyse"
 	"github.com/adedayo/vantage/pkg/finding"
+	"github.com/adedayo/vantage/pkg/netattr"
 )
 
 // Default concurrency limits. They are deliberately modest: the tool queries
@@ -26,6 +27,27 @@ const (
 type Runner struct {
 	// Checks to run against every target.
 	Checks []Check
+	// Resolver is the DNS egress every check queries through. It is required:
+	// a runner with no resolver has no sanctioned way to reach the network,
+	// and Run refuses rather than falling back to an ambient default.
+	//
+	// Supplying it per runner is what makes concurrent assessments under
+	// different scopes safe. An embedding consumer wraps its own policy around
+	// a Client here, and a target outside that policy becomes unreachable at
+	// the point of egress rather than merely un-requested.
+	Resolver vantage.Resolver
+	// HTTP is the egress for checks that fetch a policy file, a page body or a
+	// provider range list. Nil uses the library default client; an embedding
+	// consumer supplies a guarded one so that an out-of-scope host is refused
+	// at the transport rather than merely un-requested.
+	HTTP vantage.Doer
+	// RangeStore, when non-nil, persists downloaded provider range files so
+	// that one download is shared across assessments instead of repeated.
+	// It is supplied per runner rather than held globally: the files are
+	// fetched through this runner's HTTP client, and a process-wide cache
+	// would let one assessment serve another the results of an endpoint the
+	// second was never authorised to contact.
+	RangeStore netattr.RangeStore
 	// Concurrency bounds how many targets are assessed at once.
 	Concurrency int
 	// CheckConcurrency bounds how many checks run at once per target.
@@ -43,10 +65,21 @@ type Runner struct {
 	// ExpectJurisdictions are the ISO 3166-1 alpha-2 countries the operator
 	// declares their infrastructure should be in.
 	ExpectJurisdictions []string
-	// Progress, when non-nil, is called as each target completes. It is invoked
-	// from multiple goroutines, so implementations must be safe for concurrent
-	// use.
-	Progress func(target string, done, total int)
+	// Observer, when non-nil, receives structured progress events as the run
+	// advances. It is invoked from multiple goroutines, so implementations
+	// must be safe for concurrent use, and it is called while a target's
+	// results are being assembled, so it must not block for long.
+	Observer func(Progress)
+	// Version is the embedding build's version, stamped onto results for
+	// provenance. Empty means unknown.
+	Version string
+}
+
+// emit delivers a progress event if anyone is listening.
+func (r *Runner) emit(p Progress) {
+	if r.Observer != nil {
+		r.Observer(p)
+	}
 }
 
 // targetResult holds one target's outcome before merging.
@@ -66,6 +99,9 @@ type targetResult struct {
 func (r *Runner) Run(ctx context.Context, result *finding.Result, targets ...string) error {
 	if len(r.Checks) == 0 {
 		return errors.New("error: no checks selected")
+	}
+	if r.Resolver == nil {
+		return errors.New("error: no resolver configured")
 	}
 	targets = normaliseTargets(targets)
 	if len(targets) == 0 {
@@ -97,18 +133,20 @@ func (r *Runner) Run(ctx context.Context, result *finding.Result, targets ...str
 				return
 			}
 
-			out := r.runTarget(ctx, i, target)
+			out := r.runTarget(ctx, i, target, len(targets))
 
 			mu.Lock()
 			results[i] = out
 			done++
-			progress := r.Progress
 			completed := done
 			mu.Unlock()
 
-			if progress != nil {
-				progress(target, completed, len(targets))
-			}
+			r.emit(Progress{
+				Phase:       PhaseTargetCompleted,
+				Target:      target,
+				TargetsDone: completed, TargetsTotal: len(targets),
+				ChecksDone: len(out.checks), ChecksTotal: len(r.Checks),
+			})
 		}(i, target)
 	}
 	wg.Wait()
@@ -126,7 +164,7 @@ func (r *Runner) Run(ctx context.Context, result *finding.Result, targets ...str
 			result.AddError(e)
 		}
 	}
-	result.Resolvers = vantage.Resolvers()
+	result.Resolvers = r.Resolver.Servers()
 	result.Finalise()
 	result.Summary.Grade = Grade(result.Findings)
 	result.Summary.GradeVersion = GradeVersion
@@ -135,8 +173,18 @@ func (r *Runner) Run(ctx context.Context, result *finding.Result, targets ...str
 }
 
 // runTarget assesses one target with all selected checks.
-func (r *Runner) runTarget(ctx context.Context, index int, target string) targetResult {
+func (r *Runner) runTarget(ctx context.Context, index int, target string, totalTargets int) targetResult {
 	out := targetResult{index: index, target: target}
+
+	r.emit(Progress{
+		Phase:  PhaseTargetStarted,
+		Target: target,
+		// Targets completed is not yet incremented for this one, so index is
+		// not a count; report only the total and let the consumer track its
+		// own arithmetic from the completion events.
+		TargetsTotal: totalTargets,
+		ChecksTotal:  len(r.Checks),
+	})
 
 	checkConcurrency := r.CheckConcurrency
 	if checkConcurrency <= 0 {
@@ -147,7 +195,7 @@ func (r *Runner) runTarget(ctx context.Context, index int, target string) target
 	// per-target cache keeps memory bounded when assessing a large portfolio.
 	t := Target{
 		Domain:              target,
-		Cache:               NewCache(),
+		Cache:               NewCacheWithHTTP(r.Resolver, r.HTTP).WithRangeStore(r.RangeStore),
 		Hosts:               hostsWithin(target, r.Hosts),
 		ExpectJurisdictions: r.ExpectJurisdictions,
 		NoNetwork:           r.NoNetwork,
@@ -190,11 +238,14 @@ func (r *Runner) runTarget(ctx context.Context, index int, target string) target
 			name := check.Describe().Name
 			outcome, err := check.Run(ctx, t)
 
-			mu.Lock()
-			defer mu.Unlock()
+			// state is captured under the lock and emitted after releasing it,
+			// so that a slow observer cannot serialise the whole target.
+			var state finding.State
 
+			mu.Lock()
 			switch {
 			case err != nil && errors.Is(err, vantage.ErrNotFound):
+				state = finding.StateNotFound
 				out.checks = append(out.checks, finding.CheckResult{
 					Check: name, Target: target, State: finding.StateNotFound,
 				})
@@ -206,13 +257,14 @@ func (r *Runner) runTarget(ctx context.Context, index int, target string) target
 				// blocked network from a broken tool, and for checks like
 				// AXFR the list of servers tried is the entire justification
 				// for the failure.
+				state = finding.StateCheckFailed
 				out.checks = append(out.checks, finding.CheckResult{
 					Check: name, Target: target, State: finding.StateCheckFailed,
 					Records: outcome.Records,
 				})
 				out.errs = append(out.errs, ClassifyError(name, target, err))
 			default:
-				state := outcome.State
+				state = outcome.State
 				if state == "" {
 					state = finding.StateOK
 				}
@@ -221,6 +273,15 @@ func (r *Runner) runTarget(ctx context.Context, index int, target string) target
 				})
 				out.findings = append(out.findings, outcome.Findings...)
 			}
+			checksDone := len(out.checks)
+			mu.Unlock()
+
+			r.emit(Progress{
+				Phase:  PhaseCheckCompleted,
+				Target: target, Check: name, State: state,
+				TargetsTotal: totalTargets,
+				ChecksDone:   checksDone, ChecksTotal: len(r.Checks),
+			})
 		}(check)
 	}
 	wg.Wait()
@@ -247,24 +308,39 @@ func normaliseTargets(targets []string) []string {
 // ClassifyError converts a check failure into a structured error with a stable
 // code and a retry hint, so an automated consumer never has to interpret the
 // wording of a message.
+//
+// Classification is by wrapped sentinel first and message substring only as a
+// fallback. The substring arm covers errors arriving from dependencies that
+// know nothing of our sentinels; anything raised within vantage should match on
+// the sentinel, so that rewording a message can never change a verdict.
+//
+// Ordering matters. Cancellation and deadlines are tested before transport
+// failures because a timeout surfaces wrapped in a resolver error, and the
+// actionable fact is that the caller's budget ran out, not that a server was
+// unreachable. Out-of-scope is tested before everything because it means no
+// attempt was made at all.
 func ClassifyError(check, target string, err error) finding.CheckError {
 	msg := err.Error()
 	code := finding.ErrCodeInternal
 	retryable := false
 
 	switch {
-	case errors.Is(err, context.DeadlineExceeded) ||
+	case errors.Is(err, vantage.ErrOutOfScope):
+		code = finding.ErrCodeOutOfScope
+	case errors.Is(err, vantage.ErrNetworkDisabled):
+		code = finding.ErrCodeNetworkDisabled
+	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) ||
 		strings.Contains(msg, "timeout") || strings.Contains(msg, "deadline exceeded"):
 		code, retryable = finding.ErrCodeTimeout, true
-	case strings.Contains(msg, "dns query failed") ||
+	case errors.Is(err, vantage.ErrResolverUnreachable) ||
+		strings.Contains(msg, "dns query failed") ||
 		strings.Contains(msg, "no DNS resolvers") ||
 		strings.Contains(msg, "no resolvers"):
 		code, retryable = finding.ErrCodeResolverUnreachable, true
 	case errors.Is(err, vantage.ErrNotFound) || strings.Contains(msg, "not found"):
 		code = finding.ErrCodeNotFound
-	case strings.Contains(msg, "network disabled"):
-		code = finding.ErrCodeNetworkDisabled
-	case strings.Contains(msg, "invalid") || strings.Contains(msg, "malformed"):
+	case errors.Is(err, vantage.ErrInvalidRecord) ||
+		strings.Contains(msg, "invalid") || strings.Contains(msg, "malformed"):
 		code = finding.ErrCodeInvalidRecord
 	}
 

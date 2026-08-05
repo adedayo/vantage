@@ -106,8 +106,8 @@ func dnsblQueryName(ip4 net.IP, blocklist string) string {
 }
 
 // LookupSPF retrieves the SPF record for a domain and returns the raw record string.
-func LookupSPF(ctx context.Context, domain string) (string, error) {
-	txts, err := d.LookupTXT(ctx, domain)
+func LookupSPF(ctx context.Context, r d.Resolver, domain string) (string, error) {
+	txts, err := d.LookupTXT(ctx, r, domain)
 	if err != nil {
 		return "", err
 	}
@@ -121,8 +121,8 @@ func LookupSPF(ctx context.Context, domain string) (string, error) {
 }
 
 // LookupDKIM retrieves the DKIM TXT record for a domain and selector.
-func LookupDKIM(ctx context.Context, domain, selector string) (string, error) {
-	txts, err := d.LookupTXT(ctx, fmt.Sprintf("%s._domainkey.%s", selector, domain))
+func LookupDKIM(ctx context.Context, r d.Resolver, domain, selector string) (string, error) {
+	txts, err := d.LookupTXT(ctx, r, fmt.Sprintf("%s._domainkey.%s", selector, domain))
 	if err != nil {
 		return "", err
 	}
@@ -134,8 +134,8 @@ func LookupDKIM(ctx context.Context, domain, selector string) (string, error) {
 
 // LookupDMARC parses the DMARC record and returns the effective policy
 // (reject, quarantine, none). Unrecognised policy values are returned verbatim.
-func LookupDMARC(ctx context.Context, domain string) (string, error) {
-	txts, err := d.LookupTXT(ctx, "_dmarc."+domain)
+func LookupDMARC(ctx context.Context, r d.Resolver, domain string) (string, error) {
+	txts, err := d.LookupTXT(ctx, r, "_dmarc."+domain)
 	if err != nil {
 		return "", err
 	}
@@ -143,8 +143,8 @@ func LookupDMARC(ctx context.Context, domain string) (string, error) {
 }
 
 // ParseDMARCReporting extracts the rua and ruf URIs from the DMARC record.
-func ParseDMARCReporting(ctx context.Context, domain string) (rua []string, ruf []string, err error) {
-	txts, err := d.LookupTXT(ctx, "_dmarc."+domain)
+func ParseDMARCReporting(ctx context.Context, r d.Resolver, domain string) (rua []string, ruf []string, err error) {
+	txts, err := d.LookupTXT(ctx, r, "_dmarc."+domain)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -152,8 +152,8 @@ func ParseDMARCReporting(ctx context.Context, domain string) (rua []string, ruf 
 }
 
 // CheckMTASts returns the raw MTA-STS TXT record if present.
-func CheckMTASts(ctx context.Context, domain string) (string, error) {
-	txts, err := d.LookupTXT(ctx, "_mta-sts."+domain)
+func CheckMTASts(ctx context.Context, r d.Resolver, domain string) (string, error) {
+	txts, err := d.LookupTXT(ctx, r, "_mta-sts."+domain)
 	if err != nil {
 		return "", err
 	}
@@ -165,8 +165,8 @@ func CheckMTASts(ctx context.Context, domain string) (string, error) {
 
 // CheckDNSSEC queries DNSKEY records and returns "enabled" if any are present,
 // otherwise the value "not found" (a value, not an error).
-func CheckDNSSEC(ctx context.Context, domain string) (string, error) {
-	resp, err := d.Exchange(ctx, domain, dns.TypeDNSKEY)
+func CheckDNSSEC(ctx context.Context, r d.Resolver, domain string) (string, error) {
+	resp, _, err := r.ExchangeFrom(ctx, domain, dns.TypeDNSKEY)
 	if err != nil {
 		return "", err
 	}
@@ -179,8 +179,8 @@ func CheckDNSSEC(ctx context.Context, domain string) (string, error) {
 }
 
 // lookupTLSA queries TLSA records for an arbitrary name.
-func lookupTLSA(ctx context.Context, name string) (string, error) {
-	resp, err := d.Exchange(ctx, name, dns.TypeTLSA)
+func lookupTLSA(ctx context.Context, r d.Resolver, name string) (string, error) {
+	resp, _, err := r.ExchangeFrom(ctx, name, dns.TypeTLSA)
 	if err != nil {
 		return "", err
 	}
@@ -188,28 +188,28 @@ func lookupTLSA(ctx context.Context, name string) (string, error) {
 }
 
 // CheckDANE retrieves TLSA records for the SMTP service (_25._tcp).
-func CheckDANE(ctx context.Context, domain string) (string, error) {
-	return lookupTLSA(ctx, "_25._tcp."+domain)
+func CheckDANE(ctx context.Context, r d.Resolver, domain string) (string, error) {
+	return lookupTLSA(ctx, r, "_25._tcp."+domain)
 }
 
 // LookupTLASSMTP is an alias for CheckDANE (SMTP TLSA records).
-func LookupTLASSMTP(ctx context.Context, domain string) (string, error) {
-	return CheckDANE(ctx, domain)
+func LookupTLASSMTP(ctx context.Context, r d.Resolver, domain string) (string, error) {
+	return CheckDANE(ctx, r, domain)
 }
 
 // LookupTLSAHTTPS retrieves TLSA records for the HTTPS service (_443._tcp).
-func LookupTLSAHTTPS(ctx context.Context, domain string) (string, error) {
-	return lookupTLSA(ctx, "_443._tcp."+domain)
+func LookupTLSAHTTPS(ctx context.Context, r d.Resolver, domain string) (string, error) {
+	return lookupTLSA(ctx, r, "_443._tcp."+domain)
 }
 
 // LookupTLSASSH retrieves TLSA records for the SSH service (_22._tcp).
-func LookupTLSASSH(ctx context.Context, domain string) (string, error) {
-	return lookupTLSA(ctx, "_22._tcp."+domain)
+func LookupTLSASSH(ctx context.Context, r d.Resolver, domain string) (string, error) {
+	return lookupTLSA(ctx, r, "_22._tcp."+domain)
 }
 
 // LookupCAA retrieves CAA records for a domain as formatted strings.
-func LookupCAA(ctx context.Context, domain string) ([]string, error) {
-	resp, err := d.Exchange(ctx, domain, dns.TypeCAA)
+func LookupCAA(ctx context.Context, r d.Resolver, domain string) ([]string, error) {
+	resp, _, err := r.ExchangeFrom(ctx, domain, dns.TypeCAA)
 	if err != nil {
 		return nil, err
 	}
@@ -218,8 +218,8 @@ func LookupCAA(ctx context.Context, domain string) ([]string, error) {
 
 // ReverseLookupPTR resolves the domain to IP addresses, then performs a PTR
 // lookup for the first address.
-func ReverseLookupPTR(ctx context.Context, domain string) (string, error) {
-	ips, err := d.LookupIP(ctx, domain)
+func ReverseLookupPTR(ctx context.Context, r d.Resolver, domain string) (string, error) {
+	ips, err := d.LookupIP(ctx, r, domain)
 	if err != nil {
 		return "", err
 	}
@@ -230,7 +230,7 @@ func ReverseLookupPTR(ctx context.Context, domain string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error: unable to construct PTR name: %w", err)
 	}
-	resp, err := d.Exchange(ctx, ptrName, dns.TypePTR)
+	resp, _, err := r.ExchangeFrom(ctx, ptrName, dns.TypePTR)
 	if err != nil {
 		return "", err
 	}
@@ -243,9 +243,9 @@ func ReverseLookupPTR(ctx context.Context, domain string) (string, error) {
 }
 
 // VerifyNSSEC checks for the presence of NSEC or NSEC3 records in the zone.
-func VerifyNSSEC(ctx context.Context, domain string) (bool, error) {
+func VerifyNSSEC(ctx context.Context, r d.Resolver, domain string) (bool, error) {
 	for _, qtype := range []uint16{dns.TypeNSEC, dns.TypeNSEC3} {
-		resp, err := d.ExchangeRaw(ctx, domain, qtype)
+		resp, _, err := r.ExchangeRawFrom(ctx, domain, qtype)
 		if err == nil && resp.Rcode == dns.RcodeSuccess && len(resp.Answer) > 0 {
 			return true, nil
 		}
@@ -255,8 +255,8 @@ func VerifyNSSEC(ctx context.Context, domain string) (bool, error) {
 
 // CheckDNSBL queries a DNSBL for the domain's first IPv4 address. A non-success
 // response code (e.g. NXDOMAIN) means "not listed" and is not an error.
-func CheckDNSBL(ctx context.Context, domain, blocklist string) (bool, error) {
-	ips, err := d.LookupIP(ctx, domain)
+func CheckDNSBL(ctx context.Context, r d.Resolver, domain, blocklist string) (bool, error) {
+	ips, err := d.LookupIP(ctx, r, domain)
 	if err != nil {
 		return false, err
 	}
@@ -267,7 +267,7 @@ func CheckDNSBL(ctx context.Context, domain, blocklist string) (bool, error) {
 	if ip4 == nil {
 		return false, fmt.Errorf("error: no IPv4 address for DNSBL check")
 	}
-	resp, err := d.ExchangeRaw(ctx, dnsblQueryName(ip4, blocklist), dns.TypeA)
+	resp, _, err := r.ExchangeRawFrom(ctx, dnsblQueryName(ip4, blocklist), dns.TypeA)
 	if err != nil {
 		return false, err
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/miekg/dns"
 
+	d "github.com/adedayo/vantage/pkg"
 	"github.com/adedayo/vantage/pkg/analyse"
 	"github.com/adedayo/vantage/pkg/scanner"
 	"github.com/adedayo/vantage/pkg/takeover"
@@ -38,7 +39,7 @@ func fetchTakeover(ctx context.Context, c *Cache, domain string, hosts []string,
 	for _, host := range dedupeHosts(append([]string{obs.Domain}, hosts...)) {
 		if h, ok := assessAlias(ctx, c, db, host); ok {
 			if corroborate {
-				corroborateHost(ctx, &h)
+				corroborateHost(ctx, c.HTTP(), &h)
 			}
 			obs.Hosts = append(obs.Hosts, h)
 		}
@@ -66,7 +67,7 @@ var corroborate = scanner.CorroborateTakeover
 // fetched. Requesting every alias would mean sending HTTP traffic to third
 // parties for no diagnostic gain, which is exactly the sort of incidental
 // noise spec 012 requires the tool to avoid.
-func corroborateHost(ctx context.Context, h *analyse.TakeoverHost) {
+func corroborateHost(ctx context.Context, hc d.Doer, h *analyse.TakeoverHost) {
 	if h.Fingerprint == nil || len(h.Fingerprint.HTTPBody) == 0 {
 		return
 	}
@@ -74,7 +75,7 @@ func corroborateHost(ctx context.Context, h *analyse.TakeoverHost) {
 		return
 	}
 
-	res := corroborate(ctx, h.Host, h.Fingerprint.HTTPBody)
+	res := corroborate(ctx, hc, h.Host, h.Fingerprint.HTTPBody)
 	h.HTTPFetched = res.Fetched
 	h.HTTPUnclaimed = res.Unclaimed
 	h.HTTPMatched = res.Matched

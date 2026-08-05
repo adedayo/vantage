@@ -33,7 +33,7 @@ structured output format) the policy is assessed rather than merely retrieved.`,
 		return runRecordCheck(ctx, args[0], recordCheck{
 			name: "caa",
 			retrieve: func(ctx context.Context, target string) ([]string, string, error) {
-				p, err := scanner.ClimbCAA(ctx, target)
+				p, err := scanner.ClimbCAA(ctx, dnsClient, target)
 				if err != nil {
 					return nil, "", err
 				}

@@ -114,25 +114,38 @@ func init() {
 	registerOutputFlags(rootCmd)
 }
 
-// initResolvers applies the --resolver flag, if supplied. When it is not
-// supplied, the vantage package auto-discovers resolvers in a platform
-// independent way, so no action is needed here.
-func initResolvers() {
-	if len(resolvers) > 0 {
-		vantage.SetResolvers(resolvers...)
-	}
-}
+// dnsClient is the resolver every command queries through. It is built once,
+// from the flags and environment, before any command runs.
+//
+// The CLI is a single-assessment process, so one client is the whole of its
+// configuration. The library keeps no equivalent: an embedding consumer builds
+// its own client — or its own Resolver implementation — per assessment, which
+// is what allows two runs under different scopes to coexist.
+var dnsClient vantage.Resolver
 
-// initTimeouts applies the --query-timeout and --timeout flags. Flags win over
-// the VANTAGE_QUERY_TIMEOUT / VANTAGE_TIMEOUT environment variables, which in
-// turn win over the built-in defaults.
-func initTimeouts() {
+// initResolvers builds the DNS client from the flags and environment.
+//
+// Precedence is flag, then environment, then platform discovery, then the
+// well-known public resolvers — resolved once here rather than consulted on
+// every query, so that what the audit was measured against cannot shift
+// underneath a run in progress.
+func initResolvers() {
+	cfg := vantage.ConfigFromEnv()
+	if len(resolvers) > 0 {
+		cfg.Servers = resolvers
+	}
 	if rootCmd.PersistentFlags().Changed("query-timeout") {
-		vantage.SetQueryTimeout(queryTimeout)
+		cfg.QueryTimeout = queryTimeout
 	}
 	if rootCmd.PersistentFlags().Changed("timeout") {
-		vantage.SetTotalTimeout(totalTimeout)
+		cfg.TotalTimeout = totalTimeout
 	}
+	dnsClient = vantage.NewClient(cfg)
+}
+
+// initTimeouts applies the --query-rate flag. The timeout flags are folded
+// into the client by initResolvers.
+func initTimeouts() {
 	if rootCmd.PersistentFlags().Changed("query-rate") {
 		vantage.SetQueryRate(queryRate)
 	}

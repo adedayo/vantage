@@ -2,13 +2,18 @@ package cmd
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/adedayo/vantage/pkg/audit"
 )
 
 // resetAuditFlags restores the package-level flag state, since cobra flags are
@@ -95,5 +100,37 @@ func TestCollectTargetsEnforcesMaxTargets(t *testing.T) {
 }
 
 func TestListChecksSucceeds(t *testing.T) {
-	require.NoError(t, listChecks())
+	// A catalogue listing must not require egress: an operator reviewing what
+	// the tool would do, before authorising it to do anything, is precisely
+	// the case where no packet should leave.
+	assessor, err := audit.NewAssessor(stubResolver{})
+	require.NoError(t, err)
+	require.NoError(t, listChecks(context.Background(), assessor))
 }
+
+// stubResolver satisfies the resolver contract without reaching the network.
+// NewAssessor requires one because there is no safe default; the catalogue
+// path never calls it.
+type stubResolver struct{}
+
+func (stubResolver) ExchangeFrom(context.Context, string, uint16) (*dns.Msg, string, error) {
+	return nil, "", errors.New("error: no egress in tests")
+}
+
+func (stubResolver) ExchangeRawFrom(context.Context, string, uint16) (*dns.Msg, string, error) {
+	return nil, "", errors.New("error: no egress in tests")
+}
+
+func (stubResolver) ExchangeDNSSECRawFrom(context.Context, string, uint16) (*dns.Msg, string, error) {
+	return nil, "", errors.New("error: no egress in tests")
+}
+
+func (stubResolver) ExchangeWithServer(context.Context, string, string, uint16) (*dns.Msg, error) {
+	return nil, errors.New("error: no egress in tests")
+}
+
+func (stubResolver) ExchangeDNSSECWithServer(context.Context, string, string, uint16) (*dns.Msg, error) {
+	return nil, errors.New("error: no egress in tests")
+}
+
+func (stubResolver) Servers() []string { return []string{"stub"} }

@@ -3,12 +3,14 @@ package scanner_test
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -93,11 +95,56 @@ func TestFetchMTASTSPolicyRejectsUntrustedCertificate(t *testing.T) {
 // TXT record advertises a policy that was never actually published.
 func TestFetchMTASTSPolicyUnreachableHost(t *testing.T) {
 	// RFC 2606 reserves .invalid, so this cannot resolve.
-	policy := scanner.FetchMTASTSPolicy(context.Background(), "nonexistent.invalid")
+	policy := scanner.FetchMTASTSPolicy(context.Background(), testResolver, nil, "nonexistent.invalid")
 
 	assert.True(t, policy.Fetched, "an attempt was made, and that must be recorded")
 	assert.False(t, policy.Valid)
 	assert.NotEmpty(t, policy.Reason)
+}
+
+// minimalResolver implements exactly the Resolver interface and nothing more.
+//
+// This is what an embedding consumer's wrapper looks like — a scope guard, say,
+// which has no reason to forward optional methods it was never asked about.
+type minimalResolver struct{}
+
+func (minimalResolver) ExchangeFrom(context.Context, string, uint16) (*dns.Msg, string, error) {
+	return nil, "", errors.New("error: not found")
+}
+
+func (minimalResolver) ExchangeRawFrom(context.Context, string, uint16) (*dns.Msg, string, error) {
+	return nil, "", errors.New("error: not found")
+}
+
+func (minimalResolver) ExchangeDNSSECRawFrom(context.Context, string, uint16) (*dns.Msg, string, error) {
+	return nil, "", errors.New("error: not found")
+}
+
+func (minimalResolver) ExchangeWithServer(context.Context, string, string, uint16) (*dns.Msg, error) {
+	return nil, errors.New("error: not found")
+}
+
+func (minimalResolver) ExchangeDNSSECWithServer(context.Context, string, string, uint16) (*dns.Msg, error) {
+	return nil, errors.New("error: not found")
+}
+
+func (minimalResolver) Servers() []string { return []string{"guarded"} }
+
+// TestFetchMTASTSPolicyAcceptsAnyResolver is a regression test.
+//
+// The fetcher used to assert its resolver into an interface carrying
+// TotalTimeout, unchecked. That holds for the library's own *Client and panics
+// for anything else — so the first embedding consumer to wrap a resolver for
+// scope enforcement would have crashed the process, on the one code path whose
+// purpose is to be safe to point at somebody else's infrastructure.
+func TestFetchMTASTSPolicyAcceptsAnyResolver(t *testing.T) {
+	require.NotPanics(t, func() {
+		policy := scanner.FetchMTASTSPolicy(
+			context.Background(), minimalResolver{}, nil, "nonexistent.invalid")
+
+		assert.True(t, policy.Fetched)
+		assert.False(t, policy.Valid)
+	}, "a resolver that implements only the documented interface must be enough")
 }
 
 // TestFetchMTASTSPolicyBoundsBodySize guards against a policy host returning an

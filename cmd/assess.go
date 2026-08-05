@@ -9,6 +9,7 @@ import (
 
 	vantage "github.com/adedayo/vantage/pkg"
 	"github.com/adedayo/vantage/pkg/analyse"
+	"github.com/adedayo/vantage/pkg/audit"
 	"github.com/adedayo/vantage/pkg/finding"
 )
 
@@ -114,27 +115,12 @@ func isNotFound(err error) bool {
 
 // checkError classifies a failure into a stable error code and a retry hint, so
 // that automated consumers never have to interpret the message text.
+//
+// It delegates to the library rather than repeating the rules. The CLI's own
+// copy classified by substring only, so a single-record command and an audit
+// could label the same failure differently — an operator would then see one
+// code interactively and another in the machine-readable output, with nothing
+// to say which was right.
 func checkError(check, target string, err error) finding.CheckError {
-	msg := err.Error()
-	code := finding.ErrCodeInternal
-	retryable := false
-
-	switch {
-	case strings.Contains(msg, "timeout") || strings.Contains(msg, "deadline exceeded"):
-		code, retryable = finding.ErrCodeTimeout, true
-	case strings.Contains(msg, "dns query failed") || strings.Contains(msg, "no resolvers"):
-		code, retryable = finding.ErrCodeResolverUnreachable, true
-	case strings.Contains(msg, "not found"):
-		code = finding.ErrCodeNotFound
-	case strings.Contains(msg, "invalid") || strings.Contains(msg, "malformed"):
-		code = finding.ErrCodeInvalidRecord
-	}
-
-	e := finding.CheckError{
-		Check: check, Target: target, Code: code, Message: msg, Retryable: retryable,
-	}
-	if retryable {
-		e.RetryAfterSeconds = 5
-	}
-	return e
+	return audit.ClassifyError(check, target, err)
 }

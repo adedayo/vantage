@@ -1,11 +1,15 @@
 package audit
 
 import (
+	"time"
+
 	"context"
 	"errors"
 	"fmt"
 	"sync"
 	"testing"
+
+	vantage "github.com/adedayo/vantage/pkg"
 
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
@@ -14,13 +18,47 @@ import (
 	"github.com/adedayo/vantage/pkg/finding"
 )
 
+// testClient is the resolver tests query through. Tests that stand up a local
+// DNS server replace it; the rest point at an address nothing answers on,
+// which is what the cache tests want — they assert on how often a question is
+// asked, not on the answer it gets.
+//
+// Injection is what makes this possible: the old package-level setters meant
+// one test's resolver configuration was every test's, so these could not run
+// in parallel and a forgotten reset leaked into unrelated cases.
+var testClient vantage.Resolver = vantage.NewClient(vantage.Config{
+	Servers:      []string{"127.0.0.1:1"},
+	QueryTimeout: 10 * time.Millisecond,
+	TotalTimeout: 50 * time.Millisecond,
+})
+
+// egressFor builds a profile equivalent to a coarse Network value, so that
+// tests written against the classification stay readable now that the profile
+// is the thing actually declared.
+func egressFor(networks ...Network) EgressProfile {
+	var e EgressProfile
+	for _, n := range networks {
+		switch n {
+		case NetworkDNS:
+			e.Resolver = true
+		case NetworkHTTPS:
+			e.TargetHTTPS = true
+		case NetworkThirdParty:
+			e.ThirdParty = []ThirdPartyService{ServiceCertSpotter}
+		case NetworkNone:
+			e.Offline = true
+		}
+	}
+	return e
+}
+
 // stub builds a check that records its invocation and returns a fixed outcome.
 func stub(name string, network Network, out Outcome, err error) Check {
 	return CheckFunc{
 		Description: Description{
 			Name:           name,
 			Summary:        name + " stub",
-			Network:        []Network{network},
+			Egress:         egressFor(network),
 			TypicalQueries: 1,
 		},
 		Fn: func(context.Context, Target) (Outcome, error) { return out, err },
@@ -94,20 +132,20 @@ func TestLookupAndNames(t *testing.T) {
 }
 
 func TestDescriptionRequiresNetwork(t *testing.T) {
-	assert.False(t, Description{Network: []Network{NetworkDNS}}.RequiresNetwork())
-	assert.False(t, Description{Network: []Network{NetworkNone}}.RequiresNetwork())
-	assert.True(t, Description{Network: []Network{NetworkDNS, NetworkHTTPS}}.RequiresNetwork())
-	assert.True(t, Description{Network: []Network{NetworkThirdParty}}.RequiresNetwork())
+	assert.False(t, Description{Egress: egressFor(NetworkDNS)}.RequiresNetwork())
+	assert.False(t, Description{Egress: egressFor(NetworkNone)}.RequiresNetwork())
+	assert.True(t, Description{Egress: egressFor(NetworkDNS, NetworkHTTPS)}.RequiresNetwork())
+	assert.True(t, Description{Egress: egressFor(NetworkThirdParty)}.RequiresNetwork())
 }
 
 func TestDescriptionExcludedByNoNetwork(t *testing.T) {
 	// Using egress is not the same as depending on it. A check that still
 	// detects a missing control from DNS alone must survive --no-network,
 	// otherwise the run reports silence as safety.
-	assert.False(t, Description{Network: []Network{NetworkDNS}}.ExcludedByNoNetwork())
-	assert.True(t, Description{Network: []Network{NetworkDNS, NetworkHTTPS}}.ExcludedByNoNetwork())
+	assert.False(t, Description{Egress: egressFor(NetworkDNS)}.ExcludedByNoNetwork())
+	assert.True(t, Description{Egress: egressFor(NetworkDNS, NetworkHTTPS)}.ExcludedByNoNetwork())
 	assert.False(t, Description{
-		Network:                []Network{NetworkDNS, NetworkHTTPS},
+		Egress:                 egressFor(NetworkDNS, NetworkHTTPS),
 		DegradesWithoutNetwork: true,
 	}.ExcludedByNoNetwork())
 }
@@ -196,7 +234,7 @@ func TestSelectionResolve(t *testing.T) {
 func TestRunnerMergesDeterministically(t *testing.T) {
 	withRegistry(t)
 	check := CheckFunc{
-		Description: Description{Name: "stub", Network: []Network{NetworkDNS}},
+		Description: Description{Name: "stub", Egress: egressFor(NetworkDNS)},
 		Fn: func(_ context.Context, tg Target) (Outcome, error) {
 			return Outcome{State: finding.StateOK, Records: []string{"r:" + tg.Domain}}, nil
 		},
@@ -205,7 +243,7 @@ func TestRunnerMergesDeterministically(t *testing.T) {
 	targets := []string{"c.example", "a.example", "b.example"}
 	var first []finding.CheckResult
 	for i := 0; i < 5; i++ {
-		r := &Runner{Checks: []Check{check}, Concurrency: 4}
+		r := &Runner{Resolver: testClient, Checks: []Check{check}, Concurrency: 4}
 		res := finding.NewResult("vantage", "test")
 		require.NoError(t, r.Run(context.Background(), res, targets...))
 		res.Finalise()
@@ -227,7 +265,7 @@ func TestRunnerIsolatesCheckFailures(t *testing.T) {
 	good := stub("good", NetworkDNS, Outcome{State: finding.StateOK, Records: []string{"ok"}}, nil)
 	bad := stub("bad", NetworkDNS, Outcome{}, errors.New("i/o timeout"))
 
-	r := &Runner{Checks: []Check{good, bad}, CheckConcurrency: 2}
+	r := &Runner{Resolver: testClient, Checks: []Check{good, bad}, CheckConcurrency: 2}
 	res := finding.NewResult("vantage", "test")
 	require.NoError(t, r.Run(context.Background(), res, "example.com"))
 	res.Finalise()
@@ -252,8 +290,8 @@ func TestRunnerRejectsEmptyInput(t *testing.T) {
 	require.Error(t, (&Runner{}).Run(context.Background(), res, "example.com"))
 
 	check := stub("stub", NetworkDNS, Outcome{}, nil)
-	require.Error(t, (&Runner{Checks: []Check{check}}).Run(context.Background(), res))
-	require.Error(t, (&Runner{Checks: []Check{check}}).Run(context.Background(), res, "  "))
+	require.Error(t, (&Runner{Resolver: testClient, Checks: []Check{check}}).Run(context.Background(), res))
+	require.Error(t, (&Runner{Resolver: testClient, Checks: []Check{check}}).Run(context.Background(), res, "  "))
 }
 
 func TestRunnerReportsProgress(t *testing.T) {
@@ -263,19 +301,69 @@ func TestRunnerReportsProgress(t *testing.T) {
 		total int
 	)
 	r := &Runner{
+		Resolver:    testClient,
 		Checks:      []Check{stub("stub", NetworkDNS, Outcome{State: finding.StateOK}, nil)},
 		Concurrency: 3,
-		Progress: func(_ string, _, t int) {
+		Observer: func(p Progress) {
+			if p.Phase != PhaseTargetCompleted {
+				return
+			}
 			mu.Lock()
 			defer mu.Unlock()
 			seen++
-			total = t
+			total = p.TargetsTotal
 		},
 	}
 	res := finding.NewResult("vantage", "test")
 	require.NoError(t, r.Run(context.Background(), res, "a.example", "b.example", "c.example"))
 	assert.Equal(t, 3, seen)
 	assert.Equal(t, 3, total)
+}
+
+// TestRunnerReportsPerCheckProgress pins the granularity an embedding consumer
+// needs. Reporting only on target completion is useless for a single target,
+// which is the common case: the user would watch a frozen bar until the whole
+// assessment finished.
+func TestRunnerReportsPerCheckProgress(t *testing.T) {
+	var (
+		mu       sync.Mutex
+		states   = map[string]finding.State{}
+		started  int
+		finished int
+	)
+	r := &Runner{
+		Resolver: testClient,
+		Checks: []Check{
+			stub("ok", NetworkDNS, Outcome{State: finding.StateOK}, nil),
+			stub("missing", NetworkDNS, Outcome{}, vantage.ErrNotFound),
+			stub("broken", NetworkDNS, Outcome{}, errors.New("boom")),
+		},
+		Observer: func(p Progress) {
+			mu.Lock()
+			defer mu.Unlock()
+			switch p.Phase {
+			case PhaseTargetStarted:
+				started++
+			case PhaseCheckCompleted:
+				states[p.Check] = p.State
+			case PhaseTargetCompleted:
+				finished++
+			}
+		},
+	}
+	res := finding.NewResult("vantage", "test")
+	require.NoError(t, r.Run(context.Background(), res, "example.com"))
+
+	assert.Equal(t, 1, started)
+	assert.Equal(t, 1, finished)
+	// The four-state distinction has to survive into progress. A consumer
+	// showing "2 of 3 done" while one of them silently failed is reporting
+	// coverage it does not have.
+	assert.Equal(t, map[string]finding.State{
+		"ok":      finding.StateOK,
+		"missing": finding.StateNotFound,
+		"broken":  finding.StateCheckFailed,
+	}, states)
 }
 
 func TestNormaliseTargets(t *testing.T) {
@@ -312,6 +400,70 @@ func TestClassifyError(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestClassifyErrorUsesSentinels pins classification to the wrapped sentinel
+// rather than the message. Every message here is deliberately worded so that
+// the substring fallback would reach the wrong answer, so the test fails if
+// somebody removes the sentinel arms and relies on wording again.
+func TestClassifyErrorUsesSentinels(t *testing.T) {
+	cases := []struct {
+		name      string
+		err       error
+		code      finding.ErrorCode
+		retryable bool
+	}{
+		{
+			"out of scope beats everything",
+			fmt.Errorf("refused: %w", vantage.ErrOutOfScope),
+			finding.ErrCodeOutOfScope, false,
+		},
+		{
+			"network disabled is not a failure to reach the network",
+			fmt.Errorf("https egress withheld: %w", vantage.ErrNetworkDisabled),
+			finding.ErrCodeNetworkDisabled, false,
+		},
+		{
+			"resolver unreachable",
+			fmt.Errorf("could not reach: %w", vantage.ErrResolverUnreachable),
+			finding.ErrCodeResolverUnreachable, true,
+		},
+		{
+			"not found is a negative result, not a failure",
+			fmt.Errorf("no record: %w", vantage.ErrNotFound),
+			finding.ErrCodeNotFound, false,
+		},
+		{
+			"invalid record",
+			fmt.Errorf("could not parse: %w", vantage.ErrInvalidRecord),
+			finding.ErrCodeInvalidRecord, false,
+		},
+		{
+			// A timeout arrives wrapped inside a resolver error. The caller's
+			// budget expiring is the actionable fact, so it must win.
+			"deadline inside a resolver error classifies as timeout",
+			fmt.Errorf("%w: %w", vantage.ErrResolverUnreachable, context.DeadlineExceeded),
+			finding.ErrCodeTimeout, true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := ClassifyError("spf", "example.com", c.err)
+			assert.Equal(t, c.code, got.Code)
+			assert.Equal(t, c.retryable, got.Retryable)
+		})
+	}
+}
+
+// TestOutOfScopeIsNeverRetryable guards a safety property. A scope refusal is
+// the caller's own policy speaking, so retrying cannot change the outcome and
+// advertising it as retryable would invite a consumer to hammer a target it
+// has already been told it may not touch.
+func TestOutOfScopeIsNeverRetryable(t *testing.T) {
+	got := ClassifyError("ct", "example.com",
+		fmt.Errorf("scope guard: %w", vantage.ErrOutOfScope))
+	assert.False(t, got.Retryable)
+	assert.Zero(t, got.RetryAfterSeconds)
 }
 
 // graded builds n findings at a severity and confidence, for grading tests.
@@ -392,7 +544,7 @@ func TestGradeDoesNotAlterReportedSeverities(t *testing.T) {
 }
 
 func TestCacheDeduplicatesConcurrentQueries(t *testing.T) {
-	c := NewCache()
+	c := NewCache(testClient)
 
 	// Prime the cache through the public surface would require a resolver, so
 	// exercise de-duplication directly: many goroutines asking the identical
@@ -414,7 +566,7 @@ func TestCacheDeduplicatesConcurrentQueries(t *testing.T) {
 }
 
 func TestCacheSeparatesQuestions(t *testing.T) {
-	c := NewCache()
+	c := NewCache(testClient)
 	for i := 0; i < 3; i++ {
 		_, _, _ = c.LookupTXT(context.Background(), fmt.Sprintf("q%d.invalid.", i))
 	}
@@ -455,7 +607,7 @@ func TestCacheJoinsSplitTXTStrings(t *testing.T) {
 }
 
 func TestRunnerString(t *testing.T) {
-	r := &Runner{Checks: []Check{stub("b", NetworkDNS, Outcome{}, nil), stub("a", NetworkDNS, Outcome{}, nil)}}
+	r := &Runner{Resolver: testClient, Checks: []Check{stub("b", NetworkDNS, Outcome{}, nil), stub("a", NetworkDNS, Outcome{}, nil)}}
 	assert.Equal(t, []string{"a", "b"}, r.SortedCheckNames())
 	assert.Contains(t, r.String(), "a")
 }

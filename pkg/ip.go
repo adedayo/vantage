@@ -13,7 +13,7 @@ import (
 // consistent across Linux, macOS and Windows and honours the --resolver flag.
 //
 // If the host is already an IP literal it is returned as-is.
-func LookupIP(ctx context.Context, host string) ([]net.IP, error) {
+func LookupIP(ctx context.Context, r Resolver, host string) ([]net.IP, error) {
 	if ip := net.ParseIP(host); ip != nil {
 		return []net.IP{ip}, nil
 	}
@@ -22,7 +22,7 @@ func LookupIP(ctx context.Context, host string) ([]net.IP, error) {
 	var firstErr error
 
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA} {
-		resp, err := Exchange(ctx, host, qtype)
+		resp, _, err := r.ExchangeFrom(ctx, host, qtype)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err

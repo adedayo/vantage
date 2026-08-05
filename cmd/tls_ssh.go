@@ -21,7 +21,7 @@ traditional PKI, reducing the risk of MITM attacks against SSH.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
-		result, err := scanner.LookupTLSASSH(ctx, args[0])
+		result, err := scanner.LookupTLSASSH(ctx, dnsClient, args[0])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return err

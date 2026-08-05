@@ -21,7 +21,7 @@ DNSSEC chain-of-trust validation.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
-		found, err := scanner.VerifyNSSEC(ctx, args[0])
+		found, err := scanner.VerifyNSSEC(ctx, dnsClient, args[0])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return err

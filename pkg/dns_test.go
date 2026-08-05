@@ -70,7 +70,7 @@ func TestExchangeHandlesOversizedUDPResponse(t *testing.T) {
 	addr, stop := startMockDNSBoth(t, mux)
 	defer stop()
 
-	msg, err := ExchangeWithServer(context.Background(), addr, "big.example", dns.TypeTXT)
+	msg, err := NewClient(Config{}).ExchangeWithServer(context.Background(), addr, "big.example", dns.TypeTXT)
 	require.NoError(t, err, "an oversized response must not be reported as a failure")
 	assert.Len(t, msg.Answer, 6, "the full record set must be returned")
 }
@@ -95,7 +95,7 @@ func TestExchangeFallsBackToTCPWhenTruncated(t *testing.T) {
 	addr, stop := startMockDNSBoth(t, mux)
 	defer stop()
 
-	msg, err := ExchangeWithServer(context.Background(), addr, "tc.example", dns.TypeTXT)
+	msg, err := NewClient(Config{}).ExchangeWithServer(context.Background(), addr, "tc.example", dns.TypeTXT)
 	require.NoError(t, err)
 	assert.False(t, msg.Truncated, "the answer must come from the TCP retry")
 	assert.Len(t, msg.Answer, 6)
@@ -117,10 +117,9 @@ func TestExchangeTreatsNXDOMAINAsNotFound(t *testing.T) {
 	addr, stop := startMockDNSBoth(t, mux)
 	defer stop()
 
-	t.Cleanup(func() { SetResolvers() })
-	SetResolvers(addr)
+	client := NewClient(Config{Servers: []string{addr}})
 
-	_, err := Exchange(context.Background(), "gone.example", dns.TypeTXT)
+	_, _, err := client.ExchangeFrom(context.Background(), "gone.example", dns.TypeTXT)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrNotFound,
 		"NXDOMAIN must be distinguishable from a failure to determine an answer")
@@ -140,10 +139,9 @@ func TestExchangeReportsOtherFailureCodes(t *testing.T) {
 	addr, stop := startMockDNSBoth(t, mux)
 	defer stop()
 
-	t.Cleanup(func() { SetResolvers() })
-	SetResolvers(addr)
+	client := NewClient(Config{Servers: []string{addr}})
 
-	_, err := Exchange(context.Background(), "broken.example", dns.TypeTXT)
+	_, _, err := client.ExchangeFrom(context.Background(), "broken.example", dns.TypeTXT)
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrNotFound, "SERVFAIL is a failure, not an absence")
 }

@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	d "github.com/adedayo/vantage/pkg"
 )
 
 // certSpotter queries the Cert Spotter issuance API.
@@ -20,10 +22,17 @@ import (
 type certSpotter struct {
 	// BaseURL allows a test to point at a local server.
 	BaseURL string
+	// HTTP is the egress this source queries through. Nil uses the library
+	// default.
+	HTTP d.Doer
 }
 
 // CertSpotter returns a Source backed by the Cert Spotter API.
 func CertSpotter() Source { return certSpotter{} }
+
+// CertSpotterWith returns a Cert Spotter Source that performs its requests
+// through hc.
+func CertSpotterWith(hc d.Doer) Source { return certSpotter{HTTP: hc} }
 
 // Name implements Source.
 func (certSpotter) Name() string { return "certspotter" }
@@ -50,7 +59,7 @@ func (c certSpotter) Search(ctx context.Context, domain string) ([]Certificate, 
 	req.Header.Set("User-Agent", "vantage")
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: certSpotterTimeout}
+	client := d.HTTPOr(c.HTTP, d.HTTPOptions{Timeout: certSpotterTimeout})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error: cannot reach the Cert Spotter API: %w", err)
@@ -125,6 +134,13 @@ type Sources []Source
 // Order is significance, not preference: each is tried until one answers. Both
 // read the same underlying logs, so the first usable answer is as good as any.
 func DefaultSources() Sources { return Sources{CertSpotter(), CrtSh()} }
+
+// DefaultSourcesWith returns the default sources, each querying through hc.
+// An embedding consumer uses this so that every CT request passes through the
+// transport it controls.
+func DefaultSourcesWith(hc d.Doer) Sources {
+	return Sources{CertSpotterWith(hc), CrtShWith(hc)}
+}
 
 // Name implements Source.
 func (s Sources) Name() string {

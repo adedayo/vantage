@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	vantage "github.com/adedayo/vantage/pkg"
 	"github.com/adedayo/vantage/pkg/finding"
 	"github.com/adedayo/vantage/pkg/report"
 )
@@ -143,7 +142,9 @@ func failOn() (finding.Severity, bool, error) {
 func newResult() *finding.Result {
 	v, _, _ := buildInfo()
 	result := finding.NewResult("vantage", v)
-	result.Resolvers = vantage.Resolvers()
+	if dnsClient != nil {
+		result.Resolvers = dnsClient.Servers()
+	}
 	return result
 }
 

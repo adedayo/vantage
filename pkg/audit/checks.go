@@ -57,7 +57,7 @@ func spfCheck() Check {
 		Description: Description{
 			Name:           "spf",
 			Summary:        "Sender Policy Framework: which hosts may send mail as the domain.",
-			Network:        []Network{NetworkDNS},
+			Egress:         EgressProfile{Resolver: true},
 			Findings:       findingIDs("spf"),
 			TypicalQueries: 12,
 		},
@@ -91,7 +91,7 @@ func dmarcCheck() Check {
 		Description: Description{
 			Name:           "dmarc",
 			Summary:        "DMARC policy: what receivers should do with unauthenticated mail.",
-			Network:        []Network{NetworkDNS},
+			Egress:         EgressProfile{Resolver: true},
 			Findings:       findingIDs("dmarc"),
 			TypicalQueries: 3,
 		},
@@ -138,7 +138,7 @@ func dkimCheck() Check {
 			Name: "dkim",
 			Summary: "DKIM signing keys, probed across the selectors used by common " +
 				"providers.",
-			Network:        []Network{NetworkDNS},
+			Egress:         EgressProfile{Resolver: true},
 			Findings:       findingIDs("dkim"),
 			TypicalQueries: len(commonDKIMSelectors),
 		},
@@ -185,7 +185,7 @@ func mxCheck() Check {
 		Description: Description{
 			Name:           "mx",
 			Summary:        "Mail exchangers published by the domain, and their hygiene.",
-			Network:        []Network{NetworkDNS},
+			Egress:         EgressProfile{Resolver: true},
 			Findings:       findingIDs("mx"),
 			TypicalQueries: 6,
 		},
@@ -221,7 +221,7 @@ func dnssecCheck() Check {
 			Name: "dnssec",
 			Summary: "DNSSEC chain of trust: keys, parent delegation, algorithms, " +
 				"signature validity and denial of existence.",
-			Network:  []Network{NetworkDNS},
+			Egress:   EgressProfile{Resolver: true},
 			Findings: findingIDs("dnssec"),
 			// DNSKEY, DS, SOA, NSEC3PARAM and a denial probe. These queries set
 			// the DO bit, so they are made directly rather than through the run
@@ -229,7 +229,7 @@ func dnssecCheck() Check {
 			TypicalQueries: 5,
 		},
 		Fn: func(ctx context.Context, t Target) (Outcome, error) {
-			zone, err := scanner.FetchDNSSECZone(ctx, t.Domain)
+			zone, err := scanner.FetchDNSSECZone(ctx, t.Cache.Resolver(), t.Domain)
 			if err != nil {
 				if isAbsent(err) {
 					return notFound(analyse.DNSSEC(analyse.Origin{Target: t.Domain}, zone)...)
@@ -256,12 +256,12 @@ func nssecCheck() Check {
 		Description: Description{
 			Name:           "nssec",
 			Summary:        "NSEC/NSEC3 denial-of-existence records.",
-			Network:        []Network{NetworkDNS},
+			Egress:         EgressProfile{Resolver: true},
 			Findings:       nil,
 			TypicalQueries: 1,
 		},
 		Fn: func(ctx context.Context, t Target) (Outcome, error) {
-			present, err := scanner.VerifyNSSEC(ctx, t.Domain)
+			present, err := scanner.VerifyNSSEC(ctx, t.Cache.Resolver(), t.Domain)
 			if err != nil {
 				if isAbsent(err) {
 					return notFound()
@@ -281,7 +281,7 @@ func caaCheck() Check {
 		Description: Description{
 			Name:           "caa",
 			Summary:        "Certification Authority Authorisation: which CAs may issue.",
-			Network:        []Network{NetworkDNS},
+			Egress:         EgressProfile{Resolver: true},
 			Findings:       findingIDs("caa"),
 			TypicalQueries: 3,
 		},
@@ -312,7 +312,7 @@ func mtastsCheck() Check {
 			// excluded by --no-network: the TXT record alone reveals whether
 			// MTA-STS is published at all, which is the finding that matters
 			// most. In that mode only the policy-dependent rules are skipped.
-			Network:                []Network{NetworkDNS, NetworkHTTPS},
+			Egress:                 EgressProfile{Resolver: true, TargetHTTPS: true},
 			DegradesWithoutNetwork: true,
 			Findings:               findingIDs("mtasts"),
 			TypicalQueries:         2,
@@ -339,7 +339,7 @@ func mtastsCheck() Check {
 			// as failures.
 			var policy analyse.MTASTSPolicy
 			if len(records) > 0 && !t.NoNetwork {
-				policy = scanner.FetchMTASTSPolicy(ctx, t.Domain)
+				policy = scanner.FetchMTASTSPolicy(ctx, t.Cache.Resolver(), t.Cache.HTTP(), t.Domain)
 			}
 
 			findings := analyse.MTASTS(origin, records, policy, mxHosts(ctx, t.Cache, t.Domain))
@@ -366,12 +366,12 @@ func ptrCheck() Check {
 		Description: Description{
 			Name:           "ptr",
 			Summary:        "Reverse DNS for the domain's addresses.",
-			Network:        []Network{NetworkDNS},
+			Egress:         EgressProfile{Resolver: true},
 			Findings:       nil,
 			TypicalQueries: 2,
 		},
 		Fn: func(ctx context.Context, t Target) (Outcome, error) {
-			record, err := scanner.ReverseLookupPTR(ctx, t.Domain)
+			record, err := scanner.ReverseLookupPTR(ctx, t.Cache.Resolver(), t.Domain)
 			if err != nil {
 				if isAbsent(err) {
 					return notFound()
@@ -389,7 +389,7 @@ func tlsrptCheck() Check {
 			Name: "tlsrpt",
 			Summary: "SMTP TLS Reporting: where receivers report failures to negotiate " +
 				"TLS with the domain's mail exchangers.",
-			Network:        []Network{NetworkDNS},
+			Egress:         EgressProfile{Resolver: true},
 			Findings:       findingIDs("tlsrpt"),
 			TypicalQueries: 1,
 		},
@@ -423,7 +423,7 @@ func bimiCheck() Check {
 		Description: Description{
 			Name:           "bimi",
 			Summary:        "Brand Indicators for Message Identification (default._bimi).",
-			Network:        []Network{NetworkDNS},
+			Egress:         EgressProfile{Resolver: true},
 			Findings:       findingIDs("bimi"),
 			TypicalQueries: 2,
 		},
@@ -461,7 +461,7 @@ func wildcardCheck() Check {
 			Name: "wild",
 			Summary: "Wildcard records: whether the zone answers for names that were " +
 				"never registered.",
-			Network:        []Network{NetworkDNS},
+			Egress:         EgressProfile{Resolver: true, TargetNameservers: true},
 			Findings:       findingIDs("wild"),
 			TypicalQueries: wildcardProbeCount * 4,
 		},
@@ -491,7 +491,7 @@ func delegationCheck() Check {
 			Name: "ns",
 			Summary: "Nameserver and delegation hygiene: redundancy, lame servers, " +
 				"glue, parent agreement and open recursion.",
-			Network:  []Network{NetworkDNS},
+			Egress:   EgressProfile{Resolver: true, TargetNameservers: true},
 			Findings: findingIDs("ns"),
 			// The NS set, the parent referral, then per nameserver: addresses,
 			// an SOA query and a recursion probe.
@@ -522,7 +522,7 @@ func takeoverCheck() Check {
 			Name: "tko",
 			Summary: "Subdomain takeover: aliases to third-party services that no " +
 				"longer hold the name.",
-			Network: []Network{NetworkDNS, NetworkHTTPS},
+			Egress: EgressProfile{Resolver: true, TargetNameservers: true, TargetHTTPS: true},
 			// DNS alone finds the dangling-alias cases, which are the
 			// highest-severity ones. HTTPS only adds corroboration for
 			// services that keep the target resolvable, so --no-network
@@ -558,7 +558,10 @@ func zoneTransferCheck() Check {
 			Name: "axfr",
 			Summary: "Zone transfer: whether any authoritative server hands the whole " +
 				"zone to an anonymous client.",
-			Network:  []Network{NetworkDNS},
+			// A zone transfer request goes to the target's own authoritative
+			// servers and asks for more than an ordinary query does, so it is
+			// declared intrusive and a deployment must consent before it runs.
+			Egress:   EgressProfile{Resolver: true, TargetNameservers: true, Intrusive: true},
 			Findings: findingIDs("axfr"),
 			// The NS set, each server's address, then one TCP attempt each.
 			TypicalQueries: 10,
@@ -607,7 +610,13 @@ func networkCheck() Check {
 			// The provider ranges are fetched from each operator's own
 			// publication, which is egress to a third party rather than to the
 			// target.
-			Network: []Network{NetworkDNS, NetworkThirdParty},
+			Egress: EgressProfile{
+				Resolver: true,
+				ThirdParty: []ThirdPartyService{
+					ServiceAWSRanges, ServiceGCPRanges,
+					ServiceCloudflareRanges, ServiceFastlyRanges,
+				},
+			},
 			// Internal-address leakage is decided from the IANA registries
 			// embedded in the binary, so the most serious rule here works with
 			// no egress at all. Only provider and jurisdiction attribution
@@ -645,7 +654,10 @@ func certificateTransparencyCheck() Check {
 				"including ones that no longer resolve.",
 			// The logs are a third party. Nothing here touches the target's
 			// own infrastructure beyond resolving the names discovered.
-			Network: []Network{NetworkThirdParty, NetworkDNS},
+			Egress: EgressProfile{
+				Resolver:   true,
+				ThirdParty: []ThirdPartyService{ServiceCertSpotter, ServiceCRTSh},
+			},
 			// Without the logs there are no names to assess and nothing to
 			// report, so under --no-network this check has no reduced form to
 			// fall back on and is excluded honestly rather than run blind.

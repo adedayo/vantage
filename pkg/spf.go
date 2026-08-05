@@ -10,8 +10,8 @@ import (
 
 // LookupSPF returns the SPF record on a domain if it exists
 // https://tools.ietf.org/html/rfc7208#section-4.6.1
-func LookupSPF(ctx context.Context, domain string) (SPFRecord, error) {
-	txts, err := LookupTXT(ctx, domain)
+func LookupSPF(ctx context.Context, r Resolver, domain string) (SPFRecord, error) {
+	txts, err := LookupTXT(ctx, r, domain)
 
 	if err == nil {
 		for _, txt := range txts {

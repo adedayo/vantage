@@ -36,11 +36,17 @@ func OrganisationalDomain(domain string) string {
 // package directly: the security judgement stays testable against synthetic
 // include graphs, which is the only practical way to cover loops and the
 // boundary either side of the ten-lookup limit.
-type SPFResolver struct{}
+type SPFResolver struct {
+	// Resolver is the DNS egress this evaluator uses. It is a field rather
+	// than ambient state so that a recursive SPF expansion — which follows
+	// includes to names the operator never wrote down — is bounded by the
+	// same egress policy as everything else.
+	Resolver d.Resolver
+}
 
 // TXT returns the TXT records published at a name.
-func (SPFResolver) TXT(ctx context.Context, name string) ([]string, error) {
-	msg, err := d.Exchange(ctx, name, dns.TypeTXT)
+func (s SPFResolver) TXT(ctx context.Context, name string) ([]string, error) {
+	msg, _, err := s.Resolver.ExchangeFrom(ctx, name, dns.TypeTXT)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +67,7 @@ func (SPFResolver) TXT(ctx context.Context, name string) ([]string, error) {
 // A lookup failure reports false rather than an error: the evaluator uses this
 // only to count void lookups, and a receiver would treat an unanswered query
 // the same way.
-func (SPFResolver) HasRecords(ctx context.Context, name, kind string) (bool, error) {
+func (s SPFResolver) HasRecords(ctx context.Context, name, kind string) (bool, error) {
 	qtypes := []uint16{dns.TypeA, dns.TypeAAAA}
 	switch kind {
 	case "mx":
@@ -73,7 +79,7 @@ func (SPFResolver) HasRecords(ctx context.Context, name, kind string) (bool, err
 	}
 
 	for _, qtype := range qtypes {
-		msg, err := d.Exchange(ctx, name, qtype)
+		msg, _, err := s.Resolver.ExchangeFrom(ctx, name, qtype)
 		if err != nil {
 			continue
 		}

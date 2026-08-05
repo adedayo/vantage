@@ -25,8 +25,10 @@ is assessed against RFC 8460 rather than merely retrieved.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runRecordCheck(context.Background(), args[0], recordCheck{
-			name:     "tlsrpt",
-			retrieve: scanner.LookupTLSRPTRecordsFrom,
+			name: "tlsrpt",
+			retrieve: func(ctx context.Context, target string) ([]string, string, error) {
+				return scanner.LookupTLSRPTRecordsFrom(ctx, dnsClient, target)
+			},
 			analyse: func(ctx context.Context, o analyse.Origin, records []string) []finding.Finding {
 				return analyse.TLSRPT(o, records)
 			},

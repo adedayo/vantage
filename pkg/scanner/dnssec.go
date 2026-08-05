@@ -32,15 +32,15 @@ type dnssecExchanger func(ctx context.Context, name string, qtype uint16) (*dns.
 
 // FetchDNSSECZone retrieves the DNSKEY, DS, RRSIG and denial-of-existence
 // records for a domain, using the system resolvers.
-func FetchDNSSECZone(ctx context.Context, domain string) (analyse.DNSSECZone, error) {
-	return fetchDNSSECZone(ctx, domain, d.ExchangeDNSSECRawFrom)
+func FetchDNSSECZone(ctx context.Context, r d.Resolver, domain string) (analyse.DNSSECZone, error) {
+	return fetchDNSSECZone(ctx, domain, r.ExchangeDNSSECRawFrom)
 }
 
 // FetchDNSSECZoneWithServer is a server-parameterised version of
 // FetchDNSSECZone.
-func FetchDNSSECZoneWithServer(ctx context.Context, domain, server string) (analyse.DNSSECZone, error) {
+func FetchDNSSECZoneWithServer(ctx context.Context, r d.Resolver, domain, server string) (analyse.DNSSECZone, error) {
 	return fetchDNSSECZone(ctx, domain, func(ctx context.Context, name string, qtype uint16) (*dns.Msg, string, error) {
-		msg, err := d.ExchangeDNSSECWithServer(ctx, server, name, qtype)
+		msg, err := r.ExchangeDNSSECWithServer(ctx, server, name, qtype)
 		return msg, server, err
 	})
 }
@@ -52,6 +52,10 @@ func FetchDNSSECZoneWithServer(ctx context.Context, domain, server string) (anal
 // failure to learn anything about the zone is an error, because that is the
 // case where silence would be indistinguishable from "not signed" — a
 // conclusion the evidence does not support.
+//
+// The resolver is not a parameter. Every query goes through exchange, which
+// the exported wrappers bind to one; taking a second would let a caller supply
+// a resolver that was then silently ignored.
 func fetchDNSSECZone(ctx context.Context, domain string, exchange dnssecExchanger) (analyse.DNSSECZone, error) {
 	domain = strings.TrimSuffix(strings.TrimSpace(domain), ".")
 	zone := analyse.DNSSECZone{}
@@ -107,6 +111,11 @@ func fetchDNSSECZone(ctx context.Context, domain string, exchange dnssecExchange
 
 // collectDenialOfExistence learns which form of authenticated denial the zone
 // serves, and with what NSEC3 parameters.
+//
+// It takes no resolver: all egress goes through exchange, which is already
+// bound to one. Accepting a second would let a caller pass a resolver that was
+// then quietly ignored, which is the kind of gap that turns a scope guard into
+// decoration.
 func collectDenialOfExistence(ctx context.Context, domain string, exchange dnssecExchanger, zone *analyse.DNSSECZone) {
 	// NSEC3PARAM is authoritative about the parameters when it is published.
 	if msg, _, err := exchange(ctx, domain, dns.TypeNSEC3PARAM); err == nil && msg != nil {

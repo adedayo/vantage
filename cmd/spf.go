@@ -54,11 +54,13 @@ records, deprecated mechanisms and overly broad address ranges are reported.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runRecordCheck(context.Background(), args[0], recordCheck{
-			name:     "spf",
-			retrieve: scanner.LookupSPFRecordsFrom,
+			name: "spf",
+			retrieve: func(ctx context.Context, target string) ([]string, string, error) {
+				return scanner.LookupSPFRecordsFrom(ctx, dnsClient, target)
+			},
 			analyse: func(ctx context.Context, o analyse.Origin, records []string) []finding.Finding {
 				return analyse.SPFRecursive(ctx, o, scanner.SPFResolver{},
-					records, scanner.SendsMail(ctx, o.Target))
+					records, scanner.SendsMail(ctx, dnsClient, o.Target))
 			},
 			render: func(records []string) {
 				for _, r := range records {

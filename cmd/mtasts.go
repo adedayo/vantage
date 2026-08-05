@@ -38,14 +38,16 @@ Policy retrieval is the only part of this command that leaves DNS. Use
 		var mtastsPolicy analyse.MTASTSPolicy
 
 		return runRecordCheck(context.Background(), args[0], recordCheck{
-			name:     "mtasts",
-			retrieve: scanner.LookupMTASTSRecordsFrom,
+			name: "mtasts",
+			retrieve: func(ctx context.Context, target string) ([]string, string, error) {
+				return scanner.LookupMTASTSRecordsFrom(ctx, dnsClient, target)
+			},
 			analyse: func(ctx context.Context, o analyse.Origin, records []string) []finding.Finding {
 				// A zero policy suppresses the rules that depend on the policy
 				// file, rather than reporting them as failures.
 				var policy analyse.MTASTSPolicy
 				if len(records) > 0 && !mtastsNoNetwork {
-					policy = scanner.FetchMTASTSPolicy(ctx, o.Target)
+					policy = scanner.FetchMTASTSPolicy(ctx, dnsClient, nil, o.Target)
 				}
 				// Retain the policy so it can be shown as evidence. Reporting a
 				// verdict drawn from a document the operator cannot see would
@@ -53,7 +55,7 @@ Policy retrieval is the only part of this command that leaves DNS. Use
 				mtastsPolicy = policy
 
 				var hosts []string
-				if mx, err := scanner.LookupMX(ctx, o.Target); err == nil {
+				if mx, err := scanner.LookupMX(ctx, dnsClient, o.Target); err == nil {
 					hosts = mx
 				}
 				return analyse.MTASTS(o, records, policy, hosts)

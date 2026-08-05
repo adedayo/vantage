@@ -13,20 +13,14 @@ import (
 func TestLegacyResolverEnvVarIsHonoured(t *testing.T) {
 	t.Setenv(ResolverEnvVar, "")
 	t.Setenv(LegacyResolverEnvVar, "192.0.2.10")
-	ResetResolverCache()
-	t.Cleanup(ResetResolverCache)
-
-	assert.Contains(t, Resolvers(), "192.0.2.10:53")
+	assert.Contains(t, NewClient(Config{}).Servers(), "192.0.2.10:53")
 }
 
 func TestCanonicalResolverEnvVarWinsOverLegacy(t *testing.T) {
 	// A host exporting both mid-migration must behave predictably.
 	t.Setenv(ResolverEnvVar, "192.0.2.20")
 	t.Setenv(LegacyResolverEnvVar, "192.0.2.10")
-	ResetResolverCache()
-	t.Cleanup(ResetResolverCache)
-
-	got := Resolvers()
+	got := NewClient(Config{}).Servers()
 	require.NotEmpty(t, got)
 	assert.Contains(t, got, "192.0.2.20:53")
 	assert.NotContains(t, got, "192.0.2.10:53")

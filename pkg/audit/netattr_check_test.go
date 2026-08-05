@@ -17,7 +17,7 @@ import (
 // verified here, because it is the one a cautious operator chooses and the one
 // in which a silent check would do the most harm.
 func TestNetworkCheckDetectsPrivateAddressLeakage(t *testing.T) {
-	startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
+	zoneClient := startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		q := r.Question[0]
@@ -37,7 +37,7 @@ func TestNetworkCheckDetectsPrivateAddressLeakage(t *testing.T) {
 
 	out, err := check.Run(context.Background(), audit.Target{
 		Domain:    "example.test",
-		Cache:     audit.NewCache(),
+		Cache:     audit.NewCache(zoneClient),
 		Hosts:     []string{"intranet.example.test"},
 		NoNetwork: true,
 	})
@@ -54,7 +54,7 @@ func TestNetworkCheckDetectsPrivateAddressLeakage(t *testing.T) {
 // address that was never retrieved cannot be attributed, and inventing a
 // verdict for it would be the defect this project has met most often.
 func TestNetworkCheckIsSilentWhenNothingResolves(t *testing.T) {
-	startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
+	zoneClient := startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeServerFailure
@@ -66,7 +66,7 @@ func TestNetworkCheckIsSilentWhenNothingResolves(t *testing.T) {
 
 	out, err := check.Run(context.Background(), audit.Target{
 		Domain:    "example.test",
-		Cache:     audit.NewCache(),
+		Cache:     audit.NewCache(zoneClient),
 		Hosts:     []string{"intranet.example.test"},
 		NoNetwork: true,
 	})
@@ -78,7 +78,7 @@ func TestNetworkCheckIsSilentWhenNothingResolves(t *testing.T) {
 // Under --no-network no operator's ranges are available, so every address is
 // unattributed — and "unattributed" must never be rendered as a finding.
 func TestNetworkCheckMakesNoClaimsWithoutProviderRanges(t *testing.T) {
-	startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
+	zoneClient := startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		q := r.Question[0]
@@ -98,7 +98,7 @@ func TestNetworkCheckMakesNoClaimsWithoutProviderRanges(t *testing.T) {
 
 	out, err := check.Run(context.Background(), audit.Target{
 		Domain:    "example.test",
-		Cache:     audit.NewCache(),
+		Cache:     audit.NewCache(zoneClient),
 		NoNetwork: true,
 	})
 	require.NoError(t, err)

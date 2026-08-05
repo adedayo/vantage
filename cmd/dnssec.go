@@ -40,7 +40,7 @@ rather than merely reported.`,
 		return runRecordCheck(ctx, args[0], recordCheck{
 			name: "dnssec",
 			retrieve: func(ctx context.Context, target string) ([]string, string, error) {
-				z, err := scanner.FetchDNSSECZone(ctx, target)
+				z, err := scanner.FetchDNSSECZone(ctx, dnsClient, target)
 				if err != nil {
 					return nil, "", err
 				}

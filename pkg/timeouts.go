@@ -1,10 +1,7 @@
 package vantage
 
 import (
-	"context"
-	"fmt"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -40,56 +37,19 @@ const (
 	TotalTimeoutEnvVar = "VANTAGE_TIMEOUT"
 )
 
-var (
-	timeoutMu    sync.RWMutex
-	queryTimeout time.Duration
-	totalTimeout time.Duration
-)
-
-// SetQueryTimeout sets the per-resolver attempt timeout. A non-positive value
-// restores the default. Lower it for snappier failover; raise it for slow links.
-func SetQueryTimeout(d time.Duration) {
-	timeoutMu.Lock()
-	defer timeoutMu.Unlock()
-	queryTimeout = d
-}
-
-// SetTotalTimeout sets the overall per-lookup timeout spanning all resolvers.
-// A non-positive value restores the default.
-func SetTotalTimeout(d time.Duration) {
-	timeoutMu.Lock()
-	defer timeoutMu.Unlock()
-	totalTimeout = d
-}
-
-// QueryTimeout returns the effective per-resolver attempt timeout: the value set
-// via SetQueryTimeout, else VANTAGE_QUERY_TIMEOUT, else DefaultQueryTimeout.
-func QueryTimeout() time.Duration {
-	timeoutMu.RLock()
-	d := queryTimeout
-	timeoutMu.RUnlock()
-	if d > 0 {
-		return d
-	}
+// ConfigFromEnv builds a Config from the environment, honouring
+// VANTAGE_QUERY_TIMEOUT and VANTAGE_TIMEOUT. A caller layers its own flags on
+// top of the result; precedence is therefore flag, then environment, then
+// default, decided at the point a client is built rather than on every query.
+func ConfigFromEnv() Config {
+	var cfg Config
 	if d, ok := durationFromEnv(QueryTimeoutEnvVar); ok {
-		return d
-	}
-	return DefaultQueryTimeout
-}
-
-// TotalTimeout returns the effective overall lookup timeout: the value set via
-// SetTotalTimeout, else VANTAGE_TIMEOUT, else DefaultTotalTimeout.
-func TotalTimeout() time.Duration {
-	timeoutMu.RLock()
-	d := totalTimeout
-	timeoutMu.RUnlock()
-	if d > 0 {
-		return d
+		cfg.QueryTimeout = d
 	}
 	if d, ok := durationFromEnv(TotalTimeoutEnvVar); ok {
-		return d
+		cfg.TotalTimeout = d
 	}
-	return DefaultTotalTimeout
+	return cfg
 }
 
 // durationFromEnv parses a positive duration from an environment variable.
@@ -103,28 +63,4 @@ func durationFromEnv(name string) (time.Duration, bool) {
 		return 0, false
 	}
 	return d, true
-}
-
-// budget returns the time remaining for the whole lookup: the smaller of the
-// configured total timeout and the caller's context deadline.
-func budget(ctx context.Context) (time.Duration, error) {
-	remaining := TotalTimeout()
-	if deadline, ok := ctx.Deadline(); ok {
-		if untilDeadline := time.Until(deadline); untilDeadline < remaining {
-			remaining = untilDeadline
-		}
-	}
-	if remaining <= 0 {
-		return 0, fmt.Errorf("error: context deadline exceeded")
-	}
-	return remaining, nil
-}
-
-// attemptTimeout returns the timeout for a single resolver attempt: the
-// per-query timeout, capped by whatever remains of the overall budget.
-func attemptTimeout(remaining time.Duration) time.Duration {
-	if q := QueryTimeout(); q < remaining {
-		return q
-	}
-	return remaining
 }

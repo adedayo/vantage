@@ -40,44 +40,46 @@ func TestNormaliseServersDeduplicatesAndDropsInvalid(t *testing.T) {
 	assert.Equal(t, []string{"1.1.1.1:53", "8.8.8.8:53"}, got)
 }
 
-func TestSetResolversOverridesDiscovery(t *testing.T) {
-	t.Cleanup(func() { SetResolvers() })
+func TestClientConfigOverridesDiscovery(t *testing.T) {
+	c := NewClient(Config{Servers: []string{"192.0.2.1", "192.0.2.2:5353"}})
+	assert.Equal(t, []string{"192.0.2.1:53", "192.0.2.2:5353"}, c.Servers())
 
-	SetResolvers("192.0.2.1", "192.0.2.2:5353")
-	assert.Equal(t, []string{"192.0.2.1:53", "192.0.2.2:5353"}, Resolvers())
+	// An empty server list falls back to discovery, so a client is always
+	// usable without configuration.
+	assert.NotEmpty(t, NewClient(Config{}).Servers())
+}
 
-	// Clearing the override restores auto-discovery.
-	SetResolvers()
-	assert.NotEmpty(t, Resolvers())
+// TestClientsAreIndependent is the property the refactor exists for: two
+// clients configured differently must not be able to affect one another.
+// Package-level setters could not offer this, which made concurrent
+// assessments under different scopes impossible to guarantee.
+func TestClientsAreIndependent(t *testing.T) {
+	a := NewClient(Config{Servers: []string{"192.0.2.1"}})
+	b := NewClient(Config{Servers: []string{"192.0.2.2"}})
+
+	assert.Equal(t, []string{"192.0.2.1:53"}, a.Servers())
+	assert.Equal(t, []string{"192.0.2.2:53"}, b.Servers())
+
+	// The returned slice is a copy: a caller mutating it cannot reconfigure
+	// the client underneath a run in progress.
+	got := a.Servers()
+	got[0] = "203.0.113.1:53"
+	assert.Equal(t, []string{"192.0.2.1:53"}, a.Servers())
 }
 
 func TestResolversFromEnvironment(t *testing.T) {
-	t.Cleanup(func() {
-		SetResolvers()
-		ResetResolverCache()
-	})
-
 	t.Setenv(ResolverEnvVar, "192.0.2.10, 192.0.2.11:5353")
-	SetResolvers() // ensure no override is in effect
-	ResetResolverCache()
-
-	assert.Equal(t, []string{"192.0.2.10:53", "192.0.2.11:5353"}, Resolvers())
+	assert.Equal(t, []string{"192.0.2.10:53", "192.0.2.11:5353"},
+		NewClient(Config{}).Servers())
 }
 
 // TestResolversAlwaysAvailable is the platform-independence guarantee: whatever
 // the operating system (Linux, macOS, Windows) and however it is configured,
-// callers always receive at least one usable resolver address.
+// a client always has at least one usable resolver address.
 func TestResolversAlwaysAvailable(t *testing.T) {
-	t.Cleanup(func() {
-		SetResolvers()
-		ResetResolverCache()
-	})
-
 	require.NoError(t, os.Unsetenv(ResolverEnvVar))
-	SetResolvers()
-	ResetResolverCache()
 
-	servers := Resolvers()
+	servers := NewClient(Config{}).Servers()
 	require.NotEmpty(t, servers)
 	for _, s := range servers {
 		normalised, err := normaliseServer(s)

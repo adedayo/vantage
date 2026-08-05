@@ -20,7 +20,7 @@ import (
 // retrieval maps real DNS answers onto it correctly — in particular that
 // NXDOMAIN reaches the rules as NXDOMAIN, which is the difference between the
 // check working and the check being silent on every domain.
-func startZone(t *testing.T, handler func(w dns.ResponseWriter, r *dns.Msg)) {
+func startZone(t *testing.T, handler func(w dns.ResponseWriter, r *dns.Msg)) vantage.Resolver {
 	t.Helper()
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -30,14 +30,13 @@ func startZone(t *testing.T, handler func(w dns.ResponseWriter, r *dns.Msg)) {
 	go func() { _ = srv.ActivateAndServe() }()
 	t.Cleanup(func() { _ = srv.Shutdown() })
 
-	vantage.SetResolvers(pc.LocalAddr().String())
-	t.Cleanup(func() { vantage.ResetResolverCache() })
+	return vantage.NewClient(vantage.Config{Servers: []string{pc.LocalAddr().String()}})
 }
 
 // A dangling alias to a claimable service is the condition the whole check
 // exists for, so it is verified against a resolver rather than only in theory.
 func TestTakeoverCheckDetectsDanglingAlias(t *testing.T) {
-	startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
+	zoneClient := startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		q := r.Question[0]
@@ -61,7 +60,7 @@ func TestTakeoverCheckDetectsDanglingAlias(t *testing.T) {
 
 	out, err := check.Run(context.Background(), audit.Target{
 		Domain: "example.test",
-		Cache:  audit.NewCache(),
+		Cache:  audit.NewCache(zoneClient),
 		Hosts:  []string{"assets.example.test"},
 	})
 	require.NoError(t, err)
@@ -77,7 +76,7 @@ func TestTakeoverCheckDetectsDanglingAlias(t *testing.T) {
 // same defect family that has bitten this project repeatedly: a query that did
 // not complete read as a definitive answer.
 func TestTakeoverCheckIsSilentWhenTheResolverFails(t *testing.T) {
-	startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
+	zoneClient := startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		q := r.Question[0]
@@ -102,7 +101,7 @@ func TestTakeoverCheckIsSilentWhenTheResolverFails(t *testing.T) {
 
 	out, err := check.Run(context.Background(), audit.Target{
 		Domain: "example.test",
-		Cache:  audit.NewCache(),
+		Cache:  audit.NewCache(zoneClient),
 		Hosts:  []string{"assets.example.test"},
 	})
 	require.NoError(t, err)
@@ -112,9 +111,9 @@ func TestTakeoverCheckIsSilentWhenTheResolverFails(t *testing.T) {
 // aliasZone serves one host aliased to a claimable service whose target still
 // resolves — the case DNS alone cannot judge, and which HTTP corroboration
 // exists to settle.
-func aliasZone(t *testing.T) {
+func aliasZone(t *testing.T) vantage.Resolver {
 	t.Helper()
-	startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
+	return startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		q := r.Question[0]
@@ -140,10 +139,10 @@ func aliasZone(t *testing.T) {
 // The service reporting the name as unregistered is stronger evidence than any
 // DNS answer, and must reach the rules as such.
 func TestTakeoverCheckReportsHTTPCorroboration(t *testing.T) {
-	aliasZone(t)
+	zoneClient := aliasZone(t)
 
 	var asked string
-	defer audit.SetCorroborator(func(_ context.Context, host string, _ []string) scanner.TakeoverCorroboration {
+	defer audit.SetCorroborator(func(_ context.Context, _ vantage.Doer, host string, _ []string) scanner.TakeoverCorroboration {
 		asked = host
 		return scanner.TakeoverCorroboration{
 			Fetched: true, Unclaimed: true,
@@ -157,7 +156,7 @@ func TestTakeoverCheckReportsHTTPCorroboration(t *testing.T) {
 
 	out, err := check.Run(context.Background(), audit.Target{
 		Domain: "example.test",
-		Cache:  audit.NewCache(),
+		Cache:  audit.NewCache(zoneClient),
 		Hosts:  []string{"docs.example.test"},
 	})
 	require.NoError(t, err)
@@ -176,9 +175,9 @@ func TestTakeoverCheckReportsHTTPCorroboration(t *testing.T) {
 // Having looked and found the name in use, the check must not fall back to
 // reporting it as unverified.
 func TestTakeoverCheckSuppressesUnverifiedWhenTheNameIsInUse(t *testing.T) {
-	aliasZone(t)
+	zoneClient := aliasZone(t)
 
-	defer audit.SetCorroborator(func(_ context.Context, host string, _ []string) scanner.TakeoverCorroboration {
+	defer audit.SetCorroborator(func(_ context.Context, _ vantage.Doer, host string, _ []string) scanner.TakeoverCorroboration {
 		return scanner.TakeoverCorroboration{Fetched: true, URL: "https://" + host + "/", Status: 200}
 	})()
 
@@ -187,7 +186,7 @@ func TestTakeoverCheckSuppressesUnverifiedWhenTheNameIsInUse(t *testing.T) {
 
 	out, err := check.Run(context.Background(), audit.Target{
 		Domain: "example.test",
-		Cache:  audit.NewCache(),
+		Cache:  audit.NewCache(zoneClient),
 		Hosts:  []string{"docs.example.test"},
 	})
 	require.NoError(t, err)
@@ -199,9 +198,9 @@ func TestTakeoverCheckSuppressesUnverifiedWhenTheNameIsInUse(t *testing.T) {
 // a failed fetch as "in use" would silence the check on precisely the hosts
 // whose infrastructure has gone away.
 func TestTakeoverCheckKeepsUnverifiedWhenCorroborationFails(t *testing.T) {
-	aliasZone(t)
+	zoneClient := aliasZone(t)
 
-	defer audit.SetCorroborator(func(_ context.Context, _ string, _ []string) scanner.TakeoverCorroboration {
+	defer audit.SetCorroborator(func(_ context.Context, _ vantage.Doer, _ string, _ []string) scanner.TakeoverCorroboration {
 		return scanner.TakeoverCorroboration{Error: "connection refused"}
 	})()
 
@@ -210,7 +209,7 @@ func TestTakeoverCheckKeepsUnverifiedWhenCorroborationFails(t *testing.T) {
 
 	out, err := check.Run(context.Background(), audit.Target{
 		Domain: "example.test",
-		Cache:  audit.NewCache(),
+		Cache:  audit.NewCache(zoneClient),
 		Hosts:  []string{"docs.example.test"},
 	})
 	require.NoError(t, err)
@@ -225,10 +224,10 @@ func TestTakeoverCheckKeepsUnverifiedWhenCorroborationFails(t *testing.T) {
 // --no-network must not send HTTP traffic. A check that quietly egressed after
 // being told not to would break the promise the flag exists to make.
 func TestTakeoverCheckMakesNoRequestsWithoutNetwork(t *testing.T) {
-	aliasZone(t)
+	zoneClient := aliasZone(t)
 
 	called := false
-	defer audit.SetCorroborator(func(_ context.Context, _ string, _ []string) scanner.TakeoverCorroboration {
+	defer audit.SetCorroborator(func(_ context.Context, _ vantage.Doer, _ string, _ []string) scanner.TakeoverCorroboration {
 		called = true
 		return scanner.TakeoverCorroboration{}
 	})()
@@ -238,7 +237,7 @@ func TestTakeoverCheckMakesNoRequestsWithoutNetwork(t *testing.T) {
 
 	_, err := check.Run(context.Background(), audit.Target{
 		Domain:    "example.test",
-		Cache:     audit.NewCache(),
+		Cache:     audit.NewCache(zoneClient),
 		Hosts:     []string{"docs.example.test"},
 		NoNetwork: true,
 	})

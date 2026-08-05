@@ -29,7 +29,7 @@ func fetchNetworkAttribution(
 	// unattributed address as unknown rather than as absent from any cloud.
 	var set netattr.Set
 	if !noNetwork {
-		loaded, err := netattr.Load(ctx)
+		loaded, err := c.Ranges().Load(ctx)
 		if err != nil {
 			return analyse.NetworkObservation{}, err
 		}

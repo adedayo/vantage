@@ -18,12 +18,12 @@ import (
 // The climb stops below the public suffix: issuance policy is not inherited
 // from a registry, so continuing would attribute someone else's policy to this
 // domain.
-func ClimbCAA(ctx context.Context, domain string) (analyse.CAAPolicy, error) {
+func ClimbCAA(ctx context.Context, r d.Resolver, domain string) (analyse.CAAPolicy, error) {
 	domain = strings.TrimSuffix(strings.TrimSpace(domain), ".")
 	suffix, _ := publicsuffix.PublicSuffix(domain)
 
 	for _, name := range analyse.CAAAncestors(domain, suffix) {
-		resp, err := d.Exchange(ctx, name, dns.TypeCAA)
+		resp, _, err := r.ExchangeFrom(ctx, name, dns.TypeCAA)
 		if err != nil {
 			continue
 		}

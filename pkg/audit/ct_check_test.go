@@ -44,7 +44,7 @@ func TestCTCheckDetectsCertificateForAVanishedHost(t *testing.T) {
 		{Names: []string{"old.example.test", "www.example.test"}, Issuer: "CN=Test CA"},
 	}})()
 
-	startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
+	zoneClient := startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		q := r.Question[0]
@@ -67,7 +67,7 @@ func TestCTCheckDetectsCertificateForAVanishedHost(t *testing.T) {
 
 	out, err := check.Run(context.Background(), audit.Target{
 		Domain: "example.test",
-		Cache:  audit.NewCache(),
+		Cache:  audit.NewCache(zoneClient),
 	})
 	require.NoError(t, err)
 
@@ -90,7 +90,7 @@ func TestCTCheckIsSilentWhenTheResolverFails(t *testing.T) {
 		{Names: []string{"old.example.test"}, Issuer: "CN=Test CA"},
 	}})()
 
-	startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
+	zoneClient := startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeServerFailure
@@ -102,7 +102,7 @@ func TestCTCheckIsSilentWhenTheResolverFails(t *testing.T) {
 
 	out, err := check.Run(context.Background(), audit.Target{
 		Domain: "example.test",
-		Cache:  audit.NewCache(),
+		Cache:  audit.NewCache(zoneClient),
 	})
 	require.NoError(t, err)
 	assert.Empty(t, out.Findings)
@@ -114,7 +114,7 @@ func TestCTCheckFailsWhenTheLogIsUnreachable(t *testing.T) {
 	isolateCache(t)
 	defer audit.SetCTSource(stubSource{err: assert.AnError})()
 
-	startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
+	zoneClient := startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		_ = w.WriteMsg(m)
@@ -125,7 +125,7 @@ func TestCTCheckFailsWhenTheLogIsUnreachable(t *testing.T) {
 
 	_, err := check.Run(context.Background(), audit.Target{
 		Domain: "example.test",
-		Cache:  audit.NewCache(),
+		Cache:  audit.NewCache(zoneClient),
 	})
 	assert.Error(t, err)
 }
@@ -138,7 +138,7 @@ func TestCTCheckAssessesOnlyNamesWithinTheDomain(t *testing.T) {
 		{Names: []string{"old.example.test", "old.someone-else.test"}},
 	}})()
 
-	startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
+	zoneClient := startZone(t, func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeNameError
@@ -150,7 +150,7 @@ func TestCTCheckAssessesOnlyNamesWithinTheDomain(t *testing.T) {
 
 	out, err := check.Run(context.Background(), audit.Target{
 		Domain: "example.test",
-		Cache:  audit.NewCache(),
+		Cache:  audit.NewCache(zoneClient),
 	})
 	require.NoError(t, err)
 

@@ -29,7 +29,7 @@ selectors, test mode and malformed records are reported.`,
 		return runRecordCheck(context.Background(), args[0], recordCheck{
 			name: "dkim",
 			retrieve: func(ctx context.Context, target string) ([]string, string, error) {
-				return scanner.LookupDKIMRecordsFrom(ctx, target, dkimSelector)
+				return scanner.LookupDKIMRecordsFrom(ctx, dnsClient, target, dkimSelector)
 			},
 			analyse: func(ctx context.Context, o analyse.Origin, records []string) []finding.Finding {
 				keys := make([]analyse.DKIMKey, 0, len(records))

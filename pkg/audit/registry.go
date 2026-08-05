@@ -1,11 +1,3 @@
-// Package audit orchestrates the individual checks: it owns the registry that
-// every check declares itself to, the profiles that select subsets of them, and
-// the runner that executes them concurrently against one or many targets.
-//
-// The registry is deliberately the single source of truth. Registering a check
-// is the only step needed to expose it to the CLI, to the profiles and — when
-// spec 014 lands — to the capability manifest and MCP server, so those surfaces
-// cannot drift from what the tool actually does.
 package audit
 
 import (
@@ -42,8 +34,10 @@ type Description struct {
 	Name string
 	// Summary is a one-line explanation of what the check assesses.
 	Summary string
-	// Network declares the egress the check uses.
-	Network []Network
+	// Egress declares, as structured data, everything the check touches.
+	// Network is derived from it, so the coarse classification and the
+	// detailed one cannot disagree.
+	Egress EgressProfile
 	// DegradesWithoutNetwork declares that the check still yields useful
 	// results with DNS alone, so --no-network should narrow it rather than
 	// exclude it. MTA-STS is the motivating case: the policy file needs
@@ -175,14 +169,12 @@ func Descriptions() []Description {
 	return descs
 }
 
+// Network returns the coarse egress classification, derived from the profile.
+func (d Description) Network() []Network { return d.Egress.Networks() }
+
 // RequiresNetwork reports whether a description needs egress beyond DNS.
 func (d Description) RequiresNetwork() bool {
-	for _, n := range d.Network {
-		if n == NetworkHTTPS || n == NetworkThirdParty {
-			return true
-		}
-	}
-	return false
+	return d.Egress.RequiresNetwork()
 }
 
 // ExcludedByNoNetwork reports whether --no-network should drop the check
@@ -204,8 +196,8 @@ func ValidateRegistry() error {
 		if strings.TrimSpace(desc.Summary) == "" {
 			return fmt.Errorf("error: check %q has no summary", desc.Name)
 		}
-		if len(desc.Network) == 0 {
-			return fmt.Errorf("error: check %q does not declare its network use", desc.Name)
+		if err := desc.Egress.validate(desc.Name); err != nil {
+			return err
 		}
 		for _, id := range desc.Findings {
 			if _, ok := finding.Lookup(id); !ok {

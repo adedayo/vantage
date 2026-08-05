@@ -19,8 +19,8 @@ import (
 )
 
 // lookupTXTWithServer is a server-parameterised TXT lookup.
-func lookupTXTWithServer(ctx context.Context, name, server string) ([]string, error) {
-	resp, err := d.ExchangeWithServer(ctx, server, name, dns.TypeTXT)
+func lookupTXTWithServer(ctx context.Context, r d.Resolver, name, server string) ([]string, error) {
+	resp, err := r.ExchangeWithServer(ctx, server, name, dns.TypeTXT)
 	if err != nil {
 		return nil, err
 	}
@@ -37,8 +37,8 @@ func lookupTXTWithServer(ctx context.Context, name, server string) ([]string, er
 }
 
 // LookupSPFWithServer is a server-parameterised version of LookupSPF.
-func LookupSPFWithServer(ctx context.Context, domain, server string) (string, error) {
-	txts, err := lookupTXTWithServer(ctx, domain, server)
+func LookupSPFWithServer(ctx context.Context, r d.Resolver, domain, server string) (string, error) {
+	txts, err := lookupTXTWithServer(ctx, r, domain, server)
 	if err != nil {
 		return "", err
 	}
@@ -52,8 +52,8 @@ func LookupSPFWithServer(ctx context.Context, domain, server string) (string, er
 }
 
 // LookupDKIMWithServer is a server-parameterised version of LookupDKIM.
-func LookupDKIMWithServer(ctx context.Context, domain, selector, server string) (string, error) {
-	txts, err := lookupTXTWithServer(ctx, fmt.Sprintf("%s._domainkey.%s", selector, domain), server)
+func LookupDKIMWithServer(ctx context.Context, r d.Resolver, domain, selector, server string) (string, error) {
+	txts, err := lookupTXTWithServer(ctx, r, fmt.Sprintf("%s._domainkey.%s", selector, domain), server)
 	if err != nil {
 		return "", err
 	}
@@ -61,8 +61,8 @@ func LookupDKIMWithServer(ctx context.Context, domain, selector, server string) 
 }
 
 // LookupDMARCWithServer is a server-parameterised version of LookupDMARC.
-func LookupDMARCWithServer(ctx context.Context, domain, server string) (string, error) {
-	txts, err := lookupTXTWithServer(ctx, "_dmarc."+domain, server)
+func LookupDMARCWithServer(ctx context.Context, r d.Resolver, domain, server string) (string, error) {
+	txts, err := lookupTXTWithServer(ctx, r, "_dmarc."+domain, server)
 	if err != nil {
 		return "", err
 	}
@@ -70,8 +70,8 @@ func LookupDMARCWithServer(ctx context.Context, domain, server string) (string, 
 }
 
 // ParseDMARCReportingWithServer is a server-parameterised version of ParseDMARCReporting.
-func ParseDMARCReportingWithServer(ctx context.Context, domain, server string) (rua []string, ruf []string, err error) {
-	txts, err := lookupTXTWithServer(ctx, "_dmarc."+domain, server)
+func ParseDMARCReportingWithServer(ctx context.Context, r d.Resolver, domain, server string) (rua []string, ruf []string, err error) {
+	txts, err := lookupTXTWithServer(ctx, r, "_dmarc."+domain, server)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -79,8 +79,8 @@ func ParseDMARCReportingWithServer(ctx context.Context, domain, server string) (
 }
 
 // CheckMTAStsWithServer is a server-parameterised version of CheckMTASts.
-func CheckMTAStsWithServer(ctx context.Context, domain, server string) (string, error) {
-	txts, err := lookupTXTWithServer(ctx, "_mta-sts."+domain, server)
+func CheckMTAStsWithServer(ctx context.Context, r d.Resolver, domain, server string) (string, error) {
+	txts, err := lookupTXTWithServer(ctx, r, "_mta-sts."+domain, server)
 	if err != nil {
 		return "", err
 	}
@@ -88,8 +88,8 @@ func CheckMTAStsWithServer(ctx context.Context, domain, server string) (string, 
 }
 
 // CheckDNSSECWithServer is a server-parameterised version of CheckDNSSEC.
-func CheckDNSSECWithServer(ctx context.Context, domain, server string) (string, error) {
-	resp, err := d.ExchangeWithServer(ctx, server, domain, dns.TypeDNSKEY)
+func CheckDNSSECWithServer(ctx context.Context, r d.Resolver, domain, server string) (string, error) {
+	resp, err := r.ExchangeWithServer(ctx, server, domain, dns.TypeDNSKEY)
 	if err != nil {
 		return "", err
 	}
@@ -105,8 +105,8 @@ func CheckDNSSECWithServer(ctx context.Context, domain, server string) (string, 
 }
 
 // lookupTLSAWithServer queries TLSA records for an arbitrary name.
-func lookupTLSAWithServer(ctx context.Context, name, server string) (string, error) {
-	resp, err := d.ExchangeWithServer(ctx, server, name, dns.TypeTLSA)
+func lookupTLSAWithServer(ctx context.Context, r d.Resolver, name, server string) (string, error) {
+	resp, err := r.ExchangeWithServer(ctx, server, name, dns.TypeTLSA)
 	if err != nil {
 		return "", err
 	}
@@ -114,23 +114,23 @@ func lookupTLSAWithServer(ctx context.Context, name, server string) (string, err
 }
 
 // LookupTLSAHTTPSWithServer is a server-parameterised version of LookupTLSAHTTPS.
-func LookupTLSAHTTPSWithServer(ctx context.Context, domain, server string) (string, error) {
-	return lookupTLSAWithServer(ctx, "_443._tcp."+domain, server)
+func LookupTLSAHTTPSWithServer(ctx context.Context, r d.Resolver, domain, server string) (string, error) {
+	return lookupTLSAWithServer(ctx, r, "_443._tcp."+domain, server)
 }
 
 // LookupTLSASSHWithServer is a server-parameterised version of LookupTLSASSH.
-func LookupTLSASSHWithServer(ctx context.Context, domain, server string) (string, error) {
-	return lookupTLSAWithServer(ctx, "_22._tcp."+domain, server)
+func LookupTLSASSHWithServer(ctx context.Context, r d.Resolver, domain, server string) (string, error) {
+	return lookupTLSAWithServer(ctx, r, "_22._tcp."+domain, server)
 }
 
 // LookupTLASSMTPWithServer is a server-parameterised version of LookupTLASSMTP.
-func LookupTLASSMTPWithServer(ctx context.Context, domain, server string) (string, error) {
-	return lookupTLSAWithServer(ctx, "_25._tcp."+domain, server)
+func LookupTLASSMTPWithServer(ctx context.Context, r d.Resolver, domain, server string) (string, error) {
+	return lookupTLSAWithServer(ctx, r, "_25._tcp."+domain, server)
 }
 
 // LookupCAAWithServer is a server-parameterised version of LookupCAA.
-func LookupCAAWithServer(ctx context.Context, domain, server string) ([]string, error) {
-	resp, err := d.ExchangeWithServer(ctx, server, domain, dns.TypeCAA)
+func LookupCAAWithServer(ctx context.Context, r d.Resolver, domain, server string) ([]string, error) {
+	resp, err := r.ExchangeWithServer(ctx, server, domain, dns.TypeCAA)
 	if err != nil {
 		return nil, err
 	}
@@ -138,9 +138,9 @@ func LookupCAAWithServer(ctx context.Context, domain, server string) ([]string, 
 }
 
 // VerifyNSSECWithServer is a server-parameterised version of VerifyNSSEC.
-func VerifyNSSECWithServer(ctx context.Context, domain, server string) (bool, error) {
+func VerifyNSSECWithServer(ctx context.Context, r d.Resolver, domain, server string) (bool, error) {
 	for _, qtype := range []uint16{dns.TypeNSEC, dns.TypeNSEC3} {
-		resp, err := d.ExchangeWithServer(ctx, server, domain, qtype)
+		resp, err := r.ExchangeWithServer(ctx, server, domain, qtype)
 		if err == nil && resp.Rcode == dns.RcodeSuccess && len(resp.Answer) > 0 {
 			return true, nil
 		}
@@ -150,12 +150,12 @@ func VerifyNSSECWithServer(ctx context.Context, domain, server string) (bool, er
 
 // CheckDNSBLWithServer queries the DNSBL for a given net.IP using the provided
 // server, bypassing address resolution so callers can control the IP under test.
-func CheckDNSBLWithServer(ctx context.Context, ip net.IP, blocklist, server string) (bool, error) {
+func CheckDNSBLWithServer(ctx context.Context, r d.Resolver, ip net.IP, blocklist, server string) (bool, error) {
 	ip4 := firstIPv4([]net.IP{ip})
 	if ip4 == nil {
 		return false, fmt.Errorf("error: no IPv4 address for DNSBL check")
 	}
-	resp, err := d.ExchangeWithServer(ctx, server, dnsblQueryName(ip4, blocklist), dns.TypeA)
+	resp, err := r.ExchangeWithServer(ctx, server, dnsblQueryName(ip4, blocklist), dns.TypeA)
 	if err != nil {
 		return false, err
 	}

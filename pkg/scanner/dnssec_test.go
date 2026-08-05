@@ -144,7 +144,7 @@ func TestFetchDNSSECZoneCollectsTheChain(t *testing.T) {
 	})
 	defer stop()
 
-	zone, err := scanner.FetchDNSSECZoneWithServer(context.Background(), "signed.test", addr)
+	zone, err := scanner.FetchDNSSECZoneWithServer(context.Background(), testResolver, "signed.test", addr)
 	require.NoError(t, err)
 
 	require.Len(t, zone.Keys, 1)
@@ -188,7 +188,7 @@ func TestFetchDNSSECZoneDetectsAStaleDS(t *testing.T) {
 	addr, stop := serveZone(t, "stale.test", zoneOptions{key: key, ds: stale})
 	defer stop()
 
-	zone, err := scanner.FetchDNSSECZoneWithServer(context.Background(), "stale.test", addr)
+	zone, err := scanner.FetchDNSSECZoneWithServer(context.Background(), testResolver, "stale.test", addr)
 	require.NoError(t, err)
 
 	require.Len(t, zone.DS, 1)
@@ -203,7 +203,7 @@ func TestFetchDNSSECZoneIslandOfTrust(t *testing.T) {
 	addr, stop := serveZone(t, "island.test", zoneOptions{key: key})
 	defer stop()
 
-	zone, err := scanner.FetchDNSSECZoneWithServer(context.Background(), "island.test", addr)
+	zone, err := scanner.FetchDNSSECZoneWithServer(context.Background(), testResolver, "island.test", addr)
 	require.NoError(t, err)
 
 	assert.NotEmpty(t, zone.Keys)
@@ -215,7 +215,7 @@ func TestFetchDNSSECZoneUnsignedZone(t *testing.T) {
 	addr, stop := serveZone(t, "plain.test", zoneOptions{})
 	defer stop()
 
-	zone, err := scanner.FetchDNSSECZoneWithServer(context.Background(), "plain.test", addr)
+	zone, err := scanner.FetchDNSSECZoneWithServer(context.Background(), testResolver, "plain.test", addr)
 	require.NoError(t, err)
 
 	assert.False(t, zone.Signed())
@@ -253,7 +253,7 @@ func TestFetchDNSSECZoneDenialOfExistence(t *testing.T) {
 			addr, stop := serveZone(t, "denial.test", tc.opts)
 			defer stop()
 
-			zone, err := scanner.FetchDNSSECZoneWithServer(context.Background(), "denial.test", addr)
+			zone, err := scanner.FetchDNSSECZoneWithServer(context.Background(), testResolver, "denial.test", addr)
 			require.NoError(t, err)
 
 			assert.Equal(t, tc.nsec, zone.NSEC)

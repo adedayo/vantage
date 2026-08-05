@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	d "github.com/adedayo/vantage/pkg"
 )
 
 // CacheTTL is how long a downloaded range file is reused.
@@ -46,18 +48,37 @@ func CacheDir() (string, error) {
 // The returned time is when the data was obtained, so a caller can disclose the
 // age of what it is reasoning from. Serving week-old data is defensible; doing
 // so without saying is not.
-func fetchCached(ctx context.Context, url string) ([]byte, time.Time, error) {
+func fetchCached(ctx context.Context, l *Loader, url string) ([]byte, time.Time, error) {
+	// A nil loader means "no store, default egress" rather than a programming
+	// error, so that the on-disk cache path remains usable without one.
+	if l == nil {
+		l = &Loader{}
+	}
+	ttl := l.ttl()
 	path, pathErr := cachePath(url)
 
-	if pathErr == nil {
-		if data, at, err := readIfFresh(path, CacheTTL); err == nil {
+	// The injected store is consulted first. An embedding consumer that
+	// supplies one is sharing a download across many assessments, and going
+	// to its own on-disk cache instead would defeat that.
+	if l.Store != nil {
+		if data, at, ok := l.Store.Get(ctx, url); ok && time.Since(at) <= ttl {
+			return data, at, nil
+		}
+	} else if pathErr == nil {
+		if data, at, err := readIfFresh(path, ttl); err == nil {
 			return data, at, nil
 		}
 	}
 
-	data, fetchErr := fetch(ctx, url)
+	data, fetchErr := fetch(ctx, l.HTTP, url)
 	if fetchErr != nil {
-		if pathErr == nil {
+		// Stale-on-unreachable: older data beats none, provided its age is
+		// disclosed. The caller reports it under Set.Stale.
+		if l.Store != nil {
+			if stale, at, ok := l.Store.Get(ctx, url); ok {
+				return stale, at, nil
+			}
+		} else if pathErr == nil {
 			if stale, at, err := readIfFresh(path, 0); err == nil {
 				return stale, at, nil
 			}
@@ -65,12 +86,15 @@ func fetchCached(ctx context.Context, url string) ([]byte, time.Time, error) {
 		return nil, time.Time{}, fetchErr
 	}
 
-	if pathErr == nil {
-		// A cache that cannot be written is not an error worth failing on: the
-		// data is in hand and the only cost is fetching it again next time.
+	now := time.Now().UTC()
+	// A cache that cannot be written is not an error worth failing on: the
+	// data is in hand and the only cost is fetching it again next time.
+	if l.Store != nil {
+		_ = l.Store.Put(ctx, url, data, now)
+	} else if pathErr == nil {
 		_ = writeCache(path, data)
 	}
-	return data, time.Now().UTC(), nil
+	return data, now, nil
 }
 
 // readIfFresh returns the cached file, and when it was written, if it is
@@ -116,14 +140,19 @@ func cachePath(url string) (string, error) {
 	return filepath.Join(dir, hex.EncodeToString(sum[:16])+".cache"), nil
 }
 
-func fetch(ctx context.Context, url string) ([]byte, error) {
+// rangeFetchTimeout bounds a single provider range download. The files run to
+// several megabytes, so the bound is generous; an unbounded fetch would let one
+// unresponsive operator stall an audit indefinitely.
+const rangeFetchTimeout = 30 * time.Second
+
+func fetch(ctx context.Context, hc d.Doer, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "vantage")
 
-	resp, err := httpClient.Do(req)
+	resp, err := d.HTTPOr(hc, d.HTTPOptions{Timeout: rangeFetchTimeout}).Do(req)
 	if err != nil {
 		return nil, err
 	}

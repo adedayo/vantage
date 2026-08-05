@@ -19,15 +19,14 @@ import (
 	"github.com/adedayo/vantage/pkg/scanner"
 )
 
-// useMockResolver points the global resolver at the given address for the
-// duration of the test.
-func useMockResolver(t *testing.T, addr string) {
+// useMockResolver returns a client pointed at the given address.
+//
+// It returns the client rather than installing it anywhere: with the resolver
+// injected there is no ambient configuration to restore, so the helper needs
+// no cleanup and tests using it can run in parallel.
+func useMockResolver(t *testing.T, addr string) vantage.Resolver {
 	t.Helper()
-	vantage.SetResolvers(addr)
-	t.Cleanup(func() {
-		vantage.SetResolvers()
-		vantage.ResetResolverCache()
-	})
+	return vantage.NewClient(vantage.Config{Servers: []string{addr}})
 }
 
 func TestPublicAPIUsesConfiguredResolver(t *testing.T) {
@@ -43,9 +42,9 @@ func TestPublicAPIUsesConfiguredResolver(t *testing.T) {
 	})
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
-	useMockResolver(t, addr)
+	testResolver := useMockResolver(t, addr)
 
-	spf, err := scanner.LookupSPF(context.Background(), "resolver.test")
+	spf, err := scanner.LookupSPF(context.Background(), testResolver, "resolver.test")
 	require.NoError(t, err)
 	assert.Equal(t, "v=spf1 include:_spf.example.com -all", spf)
 }
@@ -67,7 +66,7 @@ func TestCheckDNSSEC_Enabled(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	status, err := scanner.CheckDNSSECWithServer(context.Background(), "dnssec.test", addr)
+	status, err := scanner.CheckDNSSECWithServer(context.Background(), testResolver, "dnssec.test", addr)
 	require.NoError(t, err)
 	assert.Equal(t, "enabled", status)
 }
@@ -82,7 +81,7 @@ func TestCheckDNSSEC_NotFoundIsAValueNotAnError(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	status, err := scanner.CheckDNSSECWithServer(context.Background(), "nodnskey.test", addr)
+	status, err := scanner.CheckDNSSECWithServer(context.Background(), testResolver, "nodnskey.test", addr)
 	require.NoError(t, err)
 	assert.Equal(t, "not found", status)
 }
@@ -101,7 +100,7 @@ func TestLookupDKIM_Found(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	rec, err := scanner.LookupDKIMWithServer(context.Background(), "dkim.test", "sel1", addr)
+	rec, err := scanner.LookupDKIMWithServer(context.Background(), testResolver, "dkim.test", "sel1", addr)
 	require.NoError(t, err)
 	assert.Contains(t, rec, "v=DKIM1")
 }
@@ -130,15 +129,15 @@ func TestReverseLookupPTR_UsesConfiguredResolver(t *testing.T) {
 	})
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
-	useMockResolver(t, addr)
+	testResolver := useMockResolver(t, addr)
 
-	ptr, err := scanner.ReverseLookupPTR(context.Background(), "ptr.test")
+	ptr, err := scanner.ReverseLookupPTR(context.Background(), testResolver, "ptr.test")
 	require.NoError(t, err)
 	assert.Equal(t, "mail.ptr.test.", ptr)
 }
 
 func TestCheckDNSBL_RequiresIPv4(t *testing.T) {
-	_, err := scanner.CheckDNSBLWithServer(context.Background(),
+	_, err := scanner.CheckDNSBLWithServer(context.Background(), testResolver,
 		net.ParseIP("2001:db8::1"), "zen.spamhaus.org", "127.0.0.1:53")
 	assert.EqualError(t, err, "error: no IPv4 address for DNSBL check")
 }

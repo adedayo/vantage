@@ -6,7 +6,6 @@ import (
 
 	"github.com/miekg/dns"
 
-	d "github.com/adedayo/vantage/pkg"
 	"github.com/adedayo/vantage/pkg/analyse"
 )
 
@@ -83,7 +82,7 @@ func fetchParentDelegation(ctx context.Context, c *Cache, del *analyse.Delegatio
 			continue
 		}
 
-		referral, err := d.ExchangeWithServer(ctx, addrs[0], del.Domain, dns.TypeNS)
+		referral, err := c.Resolver().ExchangeWithServer(ctx, addrs[0], del.Domain, dns.TypeNS)
 		if err != nil || referral == nil {
 			continue
 		}
@@ -132,7 +131,7 @@ func interrogate(ctx context.Context, c *Cache, domain string, ns *analyse.Names
 
 	addr := ns.Addresses[0]
 
-	if soa, err := d.ExchangeWithServer(ctx, addr, domain, dns.TypeSOA); err == nil && soa != nil {
+	if soa, err := c.Resolver().ExchangeWithServer(ctx, addr, domain, dns.TypeSOA); err == nil && soa != nil {
 		ns.Answered = true
 		ns.Authoritative = soa.Authoritative && soa.Rcode == dns.RcodeSuccess
 		for _, rr := range soa.Answer {
@@ -142,7 +141,7 @@ func interrogate(ctx context.Context, c *Cache, domain string, ns *analyse.Names
 		}
 	}
 
-	probe, err := d.ExchangeWithServer(ctx, addr, recursionProbe, dns.TypeA)
+	probe, err := c.Resolver().ExchangeWithServer(ctx, addr, recursionProbe, dns.TypeA)
 	if err != nil || probe == nil {
 		return
 	}

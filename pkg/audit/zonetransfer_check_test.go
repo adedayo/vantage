@@ -83,8 +83,7 @@ func serveZone(t *testing.T, transferable bool) {
 	go func() { _ = resolver.ActivateAndServe() }()
 	t.Cleanup(func() { _ = resolver.Shutdown() })
 
-	vantage.SetResolvers(udp.LocalAddr().String())
-	t.Cleanup(func() { vantage.ResetResolverCache() })
+	testClient = vantage.NewClient(vantage.Config{Servers: []string{udp.LocalAddr().String()}})
 
 	original := zoneTransferPort
 	zoneTransferPort = port
@@ -98,7 +97,7 @@ func TestZoneTransferCheckReportsDisclosure(t *testing.T) {
 	require.True(t, ok)
 
 	out, err := check.Run(context.Background(), Target{
-		Domain: "example.test", Cache: NewCache(),
+		Domain: "example.test", Cache: NewCache(testClient),
 	})
 	require.NoError(t, err)
 	require.Equal(t, finding.StateOK, out.State)
@@ -124,7 +123,7 @@ func TestZoneTransferCheckReportsRefusal(t *testing.T) {
 	require.True(t, ok)
 
 	out, err := check.Run(context.Background(), Target{
-		Domain: "example.test", Cache: NewCache(),
+		Domain: "example.test", Cache: NewCache(testClient),
 	})
 
 	// A refusal is the control working: no findings, but the check completed
@@ -155,7 +154,7 @@ func TestZoneTransferCheckFailsWhenNoServerAnswers(t *testing.T) {
 	require.True(t, ok)
 
 	out, err := check.Run(context.Background(), Target{
-		Domain: "example.test", Cache: NewCache(),
+		Domain: "example.test", Cache: NewCache(testClient),
 	})
 
 	require.Error(t, err)

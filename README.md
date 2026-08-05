@@ -439,31 +439,59 @@ total timeout always wins.
 
 ## Library
 
-`vantage` is primarily a command-line tool. The Go packages are exported so it
-can be embedded — the author uses them in other projects — but they are not a
-supported API, and they are not covered by the version guarantees below. See
-[Compatibility](#compatibility) before depending on them.
+`vantage` is a library first and a command second. The `vantage` binary is an
+ordinary consumer of the same interface an embedding tool uses — it holds no
+private hooks — so anything the CLI can do, your code can do.
 
-All scanner functions take a `context.Context` as their first argument and return
-errors prefixed with `error:` (see the sentinel table in spec `002`).
+The entry point is `audit.Assessor`: ask what the library can assess, then ask
+it to assess some of that.
 
 ```go
 ctx := context.Background()
 
-// Optional: pin the resolvers and timeouts used by the library.
-vantage.SetResolvers("1.1.1.1")
-vantage.SetQueryTimeout(5 * time.Second)  // wait longer per resolver
-vantage.SetTotalTimeout(30 * time.Second) // and longer overall
+resolver := vantage.NewClient(vantage.ConfigFromEnv())
 
-policy, err := scanner.LookupDMARC(ctx, "example.com")
+assessor, err := audit.NewAssessor(resolver, audit.WithVersion("myapp/1.4.0"))
+if err != nil {
+	return err
+}
+
+result, err := assessor.Assess(ctx, audit.Request{
+	Targets:   []string{"example.com"},
+	Selection: audit.Selection{Profile: audit.ProfileStandard},
+})
 ```
 
-Passing `0` (or any non-positive duration) to either setter restores the default.
+The resolver is a required argument, not an option, and there is no
+package-level default. An assessor that could invent its own egress would
+defeat any scope guard wrapped around it, silently, at the moment it mattered
+most. Nothing configurable lives in package state, so two assessments under
+different authorisations can run concurrently in one process.
+
+Two things catch most consumers out:
+
+- **A nil error does not mean everything succeeded.** It means the run
+  completed. A check that fails is recorded and the others continue; inspect
+  `result.Checks` and `result.Errors`.
+- **There are four check states, and they do not reduce to two.** `not_found`
+  is a measurement; `check_failed` is the absence of one. Collapsing them
+  reports an unmeasured control as a passing one.
+
+**[Read the embedding guide](docs/embedding.md)** for the full contract:
+scope-guarded transports, structured progress, building your finding mapping
+against `Catalogue` rather than a hard-coded list, sharing downloaded provider
+ranges, and reviewing declared egress before a run.
+
+All functions take a `context.Context` as their first argument and return errors
+prefixed with `error:`, wrapping the sentinels in `pkg` (see the table in spec
+`002`). Match with `errors.Is`, and switch on `finding.CheckError.Code` rather
+than parsing messages.
 
 ## Compatibility
 
-Version numbers describe the **command-line interface**, because that is what
-most people depend on and what is expensive to break. Within a major version:
+Version numbers describe the **command-line interface and the embedding API**,
+because those are what people depend on and what is expensive to break. Within
+a major version:
 
 | Stable | Meaning |
 |---|---|
@@ -471,15 +499,19 @@ most people depend on and what is expensive to break. Within a major version:
 | Finding identifiers | `SURF-SPF-004` always denotes the same condition. Rules may be added, and the prose or severity of an existing rule may be revised, but an identifier is never reused for a different condition |
 | Structured output | Fields are added, not removed or repurposed; `schema_version` carries the contract |
 | Command and flag names | Existing invocations keep working; flags may be added |
+| Embedding API | `audit.Assessor`, `Request`, `Capabilities`, `Progress`, the `Option` constructors, the `finding` types and the `pkg` sentinels. Fields are added, not removed or repurposed |
 
-**The Go packages under `pkg/` are explicitly not covered.** They change
-whenever the implementation needs them to, including in patch releases. Pin a
-commit if you embed them.
+**The rest of `pkg/` is not covered.** Individual scanners, the analysis
+internals and the check implementations change whenever the work needs them to,
+including in patch releases. Reach them through `audit.Assessor` and you are on
+the supported path; import them directly and you should pin a commit.
 
-This is a deliberate trade. Freezing the Go API would slow the work that makes
-the tool useful, for the benefit of a handful of consumers who can pin instead;
-freezing the CLI costs little and protects everyone who has wired `vantage`
-into a pipeline.
+That split is the trade. Freezing every exported symbol would slow the work that
+makes the tool useful; freezing the surface an embedder actually needs — which
+is small, and was designed to be — costs little and protects the people building
+on it. New finding identifiers may appear in a minor release, which is why a
+consumer's mapping should be derived from `Catalogue` and validated in CI rather
+than maintained by hand.
 
 ## Specifications
 

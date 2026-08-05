@@ -22,8 +22,6 @@ func isolateCache(t *testing.T) string {
 	t.Setenv("HOME", dir)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
 	t.Setenv("LocalAppData", filepath.Join(dir, "appdata"))
-	Reset()
-	t.Cleanup(Reset)
 	return dir
 }
 
@@ -66,7 +64,7 @@ func TestFetchCachedStoresAndThenReusesWithoutRefetching(t *testing.T) {
 	}))
 	defer server.Close()
 
-	data, at, err := fetchCached(context.Background(), server.URL)
+	data, at, err := fetchCached(context.Background(), &Loader{}, server.URL)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("ranges"), data)
 	assert.WithinDuration(t, time.Now(), at, time.Minute)
@@ -75,7 +73,7 @@ func TestFetchCachedStoresAndThenReusesWithoutRefetching(t *testing.T) {
 	// The second call must be served from disk. Pulling several megabytes from
 	// four operators on every run is the inconsiderate behaviour spec 012
 	// requires this tool to avoid.
-	data, _, err = fetchCached(context.Background(), server.URL)
+	data, _, err = fetchCached(context.Background(), &Loader{}, server.URL)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("ranges"), data)
 	assert.Equal(t, 1, requests, "a fresh cache entry must not be refetched")
@@ -91,7 +89,7 @@ func TestFetchCachedRefetchesOnceTheEntryIsStale(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, _, err := fetchCached(context.Background(), server.URL)
+	_, _, err := fetchCached(context.Background(), &Loader{}, server.URL)
 	require.NoError(t, err)
 
 	path, err := cachePath(server.URL)
@@ -99,7 +97,7 @@ func TestFetchCachedRefetchesOnceTheEntryIsStale(t *testing.T) {
 	old := time.Now().Add(-CacheTTL - time.Hour)
 	require.NoError(t, os.Chtimes(path, old, old))
 
-	data, at, err := fetchCached(context.Background(), server.URL)
+	data, at, err := fetchCached(context.Background(), &Loader{}, server.URL)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("fresh"), data)
 	assert.Equal(t, 2, requests, "a stale entry must be refetched")
@@ -115,7 +113,7 @@ func TestFetchCachedFallsBackToStaleDataWhenTheSourceIsUnreachable(t *testing.T)
 		_, _ = w.Write([]byte("last week"))
 	}))
 
-	_, _, err := fetchCached(context.Background(), server.URL)
+	_, _, err := fetchCached(context.Background(), &Loader{}, server.URL)
 	require.NoError(t, err)
 
 	path, err := cachePath(server.URL)
@@ -125,7 +123,7 @@ func TestFetchCachedFallsBackToStaleDataWhenTheSourceIsUnreachable(t *testing.T)
 
 	server.Close() // the operator's endpoint is now unreachable
 
-	data, at, err := fetchCached(context.Background(), server.URL)
+	data, at, err := fetchCached(context.Background(), &Loader{}, server.URL)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("last week"), data)
 	// The age must be reported truthfully, so the caller can disclose it
@@ -141,7 +139,7 @@ func TestFetchCachedFailsWhenUnreachableWithNoCacheEntry(t *testing.T) {
 	url := server.URL
 	server.Close()
 
-	_, _, err := fetchCached(context.Background(), url)
+	_, _, err := fetchCached(context.Background(), &Loader{}, url)
 	// No data and no cache is the one case that must fail: inventing an empty
 	// range set would attribute nothing while looking like a successful load.
 	require.Error(t, err)
@@ -156,7 +154,7 @@ func TestFetchRejectsAnErrorStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, _, err := fetchCached(context.Background(), server.URL)
+	_, _, err := fetchCached(context.Background(), &Loader{}, server.URL)
 	require.Error(t, err)
 	// The body of an error response must never be parsed as ranges.
 	assert.Contains(t, err.Error(), "503")
@@ -174,7 +172,7 @@ func TestFetchCachedHonoursContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, _, err := fetchCached(ctx, server.URL)
+	_, _, err := fetchCached(ctx, nil, server.URL)
 	require.Error(t, err)
 }
 

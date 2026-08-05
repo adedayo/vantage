@@ -12,8 +12,8 @@ import (
 // LookupMX returns the mail exchangers published by a domain, formatted as
 // "<preference> <host>". An absent MX set is not an error: it is a legitimate
 // and meaningful state that callers need to distinguish from a lookup failure.
-func LookupMX(ctx context.Context, domain string) ([]string, error) {
-	msg, err := d.Exchange(ctx, domain, dns.TypeMX)
+func LookupMX(ctx context.Context, r d.Resolver, domain string) ([]string, error) {
+	msg, _, err := r.ExchangeFrom(ctx, domain, dns.TypeMX)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return nil, nil
@@ -36,8 +36,8 @@ func LookupMX(ctx context.Context, domain string) ([]string, error) {
 // A lookup failure returns true: assuming the domain does send mail is the
 // conservative choice, because it keeps the severity high rather than quietly
 // downgrading a real problem on the strength of a failed query.
-func SendsMail(ctx context.Context, domain string) bool {
-	records, err := LookupMX(ctx, domain)
+func SendsMail(ctx context.Context, r d.Resolver, domain string) bool {
+	records, err := LookupMX(ctx, r, domain)
 	if err != nil {
 		return true
 	}
@@ -58,15 +58,15 @@ func SendsMail(ctx context.Context, domain string) bool {
 // receivers to return PermError when a domain publishes more than one SPF
 // record, so the protection the operator believes is in place is not applied at
 // all. Analysis therefore needs the full set, not just the first.
-func LookupSPFRecords(ctx context.Context, domain string) ([]string, error) {
-	records, _, err := LookupSPFRecordsFrom(ctx, domain)
+func LookupSPFRecords(ctx context.Context, r d.Resolver, domain string) ([]string, error) {
+	records, _, err := LookupSPFRecordsFrom(ctx, r, domain)
 	return records, err
 }
 
 // LookupSPFRecordsFrom behaves like LookupSPFRecords but also reports which
 // resolver answered, so that findings can attribute their evidence.
-func LookupSPFRecordsFrom(ctx context.Context, domain string) ([]string, string, error) {
-	txts, server, err := d.LookupTXTFrom(ctx, domain)
+func LookupSPFRecordsFrom(ctx context.Context, r d.Resolver, domain string) ([]string, string, error) {
+	txts, server, err := d.LookupTXTFrom(ctx, r, domain)
 	if err != nil {
 		return nil, server, err
 	}
@@ -84,15 +84,15 @@ func LookupSPFRecordsFrom(ctx context.Context, domain string) ([]string, string,
 // with "v=DMARC1". As with SPF, publishing more than one is a misconfiguration
 // that causes receivers to ignore the policy entirely, so the caller needs all
 // of them.
-func LookupDMARCRecords(ctx context.Context, domain string) ([]string, error) {
-	records, _, err := LookupDMARCRecordsFrom(ctx, domain)
+func LookupDMARCRecords(ctx context.Context, r d.Resolver, domain string) ([]string, error) {
+	records, _, err := LookupDMARCRecordsFrom(ctx, r, domain)
 	return records, err
 }
 
 // LookupDMARCRecordsFrom behaves like LookupDMARCRecords but also reports which
 // resolver answered.
-func LookupDMARCRecordsFrom(ctx context.Context, domain string) ([]string, string, error) {
-	txts, server, err := d.LookupTXTFrom(ctx, "_dmarc."+strings.TrimSuffix(domain, "."))
+func LookupDMARCRecordsFrom(ctx context.Context, r d.Resolver, domain string) ([]string, string, error) {
+	txts, server, err := d.LookupTXTFrom(ctx, r, "_dmarc."+strings.TrimSuffix(domain, "."))
 	if err != nil {
 		return nil, server, err
 	}
@@ -108,8 +108,8 @@ func LookupDMARCRecordsFrom(ctx context.Context, domain string) ([]string, strin
 
 // LookupTLSRPTRecordsFrom returns every TXT record at _smtp._tls.<domain> that
 // begins with "v=TLSRPTv1", together with the resolver that answered.
-func LookupTLSRPTRecordsFrom(ctx context.Context, domain string) ([]string, string, error) {
-	txts, server, err := d.LookupTXTFrom(ctx, "_smtp._tls."+strings.TrimSuffix(domain, "."))
+func LookupTLSRPTRecordsFrom(ctx context.Context, r d.Resolver, domain string) ([]string, string, error) {
+	txts, server, err := d.LookupTXTFrom(ctx, r, "_smtp._tls."+strings.TrimSuffix(domain, "."))
 	if err != nil {
 		return nil, server, err
 	}
@@ -125,8 +125,8 @@ func LookupTLSRPTRecordsFrom(ctx context.Context, domain string) ([]string, stri
 
 // LookupMTASTSRecordsFrom returns every TXT record at _mta-sts.<domain> that
 // begins with "v=STSv1", together with the resolver that answered.
-func LookupMTASTSRecordsFrom(ctx context.Context, domain string) ([]string, string, error) {
-	txts, server, err := d.LookupTXTFrom(ctx, "_mta-sts."+strings.TrimSuffix(domain, "."))
+func LookupMTASTSRecordsFrom(ctx context.Context, r d.Resolver, domain string) ([]string, string, error) {
+	txts, server, err := d.LookupTXTFrom(ctx, r, "_mta-sts."+strings.TrimSuffix(domain, "."))
 	if err != nil {
 		return nil, server, err
 	}
@@ -142,8 +142,8 @@ func LookupMTASTSRecordsFrom(ctx context.Context, domain string) ([]string, stri
 
 // LookupBIMIRecordsFrom returns every TXT record at default._bimi.<domain>
 // that begins with "v=BIMI1", together with the resolver that answered.
-func LookupBIMIRecordsFrom(ctx context.Context, domain string) ([]string, string, error) {
-	txts, server, err := d.LookupTXTFrom(ctx, "default._bimi."+strings.TrimSuffix(domain, "."))
+func LookupBIMIRecordsFrom(ctx context.Context, r d.Resolver, domain string) ([]string, string, error) {
+	txts, server, err := d.LookupTXTFrom(ctx, r, "default._bimi."+strings.TrimSuffix(domain, "."))
 	if err != nil {
 		return nil, server, err
 	}
@@ -163,9 +163,9 @@ func LookupBIMIRecordsFrom(ctx context.Context, domain string) ([]string, string
 // Records are filtered on the presence of a p= tag rather than on the v=DKIM1
 // tag, because the version tag is optional in RFC 6376 and omitting it is
 // common enough that requiring it would hide real keys.
-func LookupDKIMRecordsFrom(ctx context.Context, domain, selector string) ([]string, string, error) {
+func LookupDKIMRecordsFrom(ctx context.Context, r d.Resolver, domain, selector string) ([]string, string, error) {
 	name := selector + "._domainkey." + strings.TrimSuffix(domain, ".")
-	txts, server, err := d.LookupTXTFrom(ctx, name)
+	txts, server, err := d.LookupTXTFrom(ctx, r, name)
 	if err != nil {
 		return nil, server, err
 	}

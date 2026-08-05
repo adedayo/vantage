@@ -11,9 +11,19 @@ import (
 	"github.com/adedayo/vantage/pkg/ct"
 )
 
-// ctSource is the log service used, indirected so that tests can substitute one
-// and so that a second source can be added without touching the check.
-var ctSource ct.Source = ct.DefaultSources()
+// ctSource is the log service used, indirected so that tests can substitute
+// one. It is nil in normal operation, in which case the sources are built per
+// run from the cache's HTTP egress — a package-level default would reach past
+// the boundary an embedding consumer controls.
+var ctSource ct.Source
+
+// sourceFor returns the CT sources for a run, preferring a substituted source.
+func sourceFor(c *Cache) ct.Source {
+	if ctSource != nil {
+		return ctSource
+	}
+	return ct.DefaultSourcesWith(c.HTTP())
+}
 
 // maxCTHosts bounds how many discovered names are resolved.
 //
@@ -29,7 +39,7 @@ const maxCTHosts = 200
 func enumerateCT(ctx context.Context, c *Cache, domain string) (analyse.CTObservation, error) {
 	domain = strings.ToLower(strings.TrimSuffix(domain, "."))
 
-	result, err := ct.Enumerate(ctx, ctSource, domain)
+	result, err := ct.Enumerate(ctx, sourceFor(c), domain)
 	if err != nil {
 		return analyse.CTObservation{}, err
 	}

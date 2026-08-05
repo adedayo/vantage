@@ -9,6 +9,7 @@ import (
 	"github.com/miekg/dns"
 
 	d "github.com/adedayo/vantage/pkg"
+	"github.com/adedayo/vantage/pkg/netattr"
 )
 
 // Cache memoises DNS answers for the duration of a single run.
@@ -23,6 +24,24 @@ import (
 // The cache is per-run by design. It is never persisted, so a fresh invocation
 // always sees current data; stale security posture would be worse than slow.
 type Cache struct {
+	// resolver is the DNS egress every cached query goes through. Holding it
+	// here rather than reaching for package state is what lets two concurrent
+	// runs assess different targets under different scopes: each has its own
+	// cache, and therefore its own guarded egress.
+	resolver d.Resolver
+
+	// http is the HTTP egress for the checks that fetch a policy file, a page
+	// body or a provider range list. It is held alongside the resolver for the
+	// same reason: both are boundaries an embedding consumer must be able to
+	// guard, and a check that reached past either would break the guarantee
+	// that an out-of-scope target emits no traffic.
+	http d.Doer
+
+	// ranges loads cloud provider address ranges. It is held here so that the
+	// download is shared across the targets of one assessment but not across
+	// assessments made under different authorisations.
+	ranges *netattr.Loader
+
 	mu      sync.Mutex
 	entries map[string]*cacheEntry
 	// hits and misses support the concurrency tests and --progress reporting.
@@ -36,9 +55,55 @@ type cacheEntry struct {
 	err    error
 }
 
-// NewCache creates an empty cache.
-func NewCache() *Cache {
-	return &Cache{entries: map[string]*cacheEntry{}}
+// NewCache creates an empty cache that queries through the given resolver.
+func NewCache(resolver d.Resolver) *Cache {
+	return NewCacheWithHTTP(resolver, nil)
+}
+
+// NewCacheWithHTTP creates a cache with both egress boundaries supplied. A nil
+// Doer falls back to the library default client.
+func NewCacheWithHTTP(resolver d.Resolver, hc d.Doer) *Cache {
+	return &Cache{
+		resolver: resolver,
+		http:     hc,
+		ranges:   netattr.NewLoader(hc, nil),
+		entries:  map[string]*cacheEntry{},
+	}
+}
+
+// WithRangeStore points the provider-range loader at a durable store, so that
+// one download is shared across assessments rather than repeated.
+func (c *Cache) WithRangeStore(store netattr.RangeStore) *Cache {
+	if c != nil && store != nil {
+		c.ranges = &netattr.Loader{HTTP: c.http, Store: store}
+	}
+	return c
+}
+
+// Ranges returns the provider-range loader for this assessment.
+func (c *Cache) Ranges() *netattr.Loader {
+	if c == nil {
+		return nil
+	}
+	return c.ranges
+}
+
+// HTTP returns the HTTP egress this cache's checks must use.
+func (c *Cache) HTTP() d.Doer {
+	if c == nil {
+		return nil
+	}
+	return c.http
+}
+
+// Resolver returns the egress this cache queries through. Checks that must
+// address one specific nameserver bypass the cache but must not bypass the
+// egress boundary, so they take it from here.
+func (c *Cache) Resolver() d.Resolver {
+	if c == nil {
+		return nil
+	}
+	return c.resolver
 }
 
 // Exchange performs a DNS query, reusing an in-flight or completed result for
@@ -49,8 +114,12 @@ func NewCache() *Cache {
 // sync.Once. This matters because checks run in parallel, and without it the
 // cache would reduce repeats but not the thundering herd at start-up.
 func (c *Cache) Exchange(ctx context.Context, name string, qtype uint16) (*dns.Msg, string, error) {
-	if c == nil {
-		return d.ExchangeFrom(ctx, name, qtype)
+	// A nil cache has no resolver, and therefore no sanctioned egress. Making
+	// this an error rather than falling back to an ambient default is the
+	// point of the refactor: there is no longer any way to reach the network
+	// without having been given something to reach it through.
+	if c == nil || c.resolver == nil {
+		return nil, "", fmt.Errorf("error: no resolver configured")
 	}
 
 	key := fmt.Sprintf("%s/%d", dns.Fqdn(name), qtype)
@@ -67,7 +136,7 @@ func (c *Cache) Exchange(ctx context.Context, name string, qtype uint16) (*dns.M
 	c.mu.Unlock()
 
 	entry.once.Do(func() {
-		entry.msg, entry.server, entry.err = d.ExchangeFrom(ctx, name, qtype)
+		entry.msg, entry.server, entry.err = c.resolver.ExchangeFrom(ctx, name, qtype)
 	})
 	return entry.msg, entry.server, entry.err
 }

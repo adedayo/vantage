@@ -18,6 +18,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	d "github.com/adedayo/vantage/pkg"
 )
 
 // Certificate is one issuance discovered in a log.
@@ -60,10 +62,18 @@ type Result struct {
 type crtSh struct {
 	// BaseURL allows a test to point at a local server. Empty uses crt.sh.
 	BaseURL string
+	// HTTP is the egress this source queries through. Nil uses the library
+	// default, which is what the CLI wants; an embedding consumer supplies a
+	// guarded client so that a third-party endpoint it has not consented to
+	// is refused at the transport.
+	HTTP d.Doer
 }
 
 // CrtSh returns a Source backed by crt.sh.
 func CrtSh() Source { return crtSh{} }
+
+// CrtShWith returns a crt.sh Source that performs its requests through hc.
+func CrtShWith(hc d.Doer) Source { return crtSh{HTTP: hc} }
 
 // Name implements Source.
 func (crtSh) Name() string { return "crt.sh" }
@@ -95,7 +105,7 @@ func (c crtSh) Search(ctx context.Context, domain string) ([]Certificate, error)
 	req.Header.Set("User-Agent", "vantage")
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: crtShTimeout}
+	client := d.HTTPOr(c.HTTP, d.HTTPOptions{Timeout: crtShTimeout})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error: cannot reach crt.sh: %w", err)

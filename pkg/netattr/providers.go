@@ -4,11 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/netip"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -127,10 +124,10 @@ var providerSources = []providerSource{
 //
 // A nil range slice means every endpoint failed. That is distinct from an empty
 // one, which would be a publication that genuinely lists nothing.
-func (s providerSource) load(ctx context.Context) ([]ProviderRange, string, time.Time, []string) {
+func (s providerSource) load(ctx context.Context, l *Loader) ([]ProviderRange, string, time.Time, []string) {
 	var failures []string
 	for _, e := range s.endpoints {
-		data, at, err := fetchCached(ctx, e.url)
+		data, at, err := fetchCached(ctx, l, e.url)
 		if err != nil {
 			failures = append(failures, e.url+": "+err.Error())
 			continue
@@ -219,77 +216,6 @@ func (s Set) Lookup(addr netip.Addr) Attribution {
 // Complete reports whether every source loaded. When false, an address with no
 // provider match may simply belong to an operator whose ranges are missing.
 func (s Set) Complete() bool { return len(s.Failed) == 0 }
-
-var (
-	setMu     sync.Mutex
-	cachedSet *Set
-)
-
-// Load returns the provider ranges, fetching and caching them as needed.
-//
-// The result is memoised for the process and cached on disk between runs, so a
-// portfolio audit of a hundred domains pays for the download once. Repeatedly
-// pulling several megabytes from four operators would be exactly the
-// inconsiderate behaviour spec 012 requires this tool to avoid.
-func Load(ctx context.Context) (Set, error) {
-	setMu.Lock()
-	defer setMu.Unlock()
-	if cachedSet != nil {
-		return *cachedSet, nil
-	}
-
-	set := Set{Fetched: time.Now().UTC()}
-	byName := map[string]*Provider{}
-
-	for _, src := range providerSources {
-		ranges, used, at, failures := src.load(ctx)
-		if ranges == nil {
-			set.Failed = append(set.Failed,
-				src.name+" ("+strings.Join(failures, "; ")+")")
-			continue
-		}
-		// A cache entry older than the TTL means the operator's endpoint could
-		// not be reached and last week's data is standing in for it.
-		if time.Since(at) > CacheTTL {
-			set.Stale = append(set.Stale, fmt.Sprintf("%s (%s, cached %s)",
-				src.name, used, at.Format(time.RFC3339)))
-		}
-		set.Provenance = append(set.Provenance, SourceProvenance{
-			Provider: src.name, URL: used, Fetched: at.UTC(),
-		})
-
-		p, ok := byName[src.name]
-		if !ok {
-			p = &Provider{Name: src.name, Source: used}
-			byName[src.name] = p
-		}
-		p.Ranges = append(p.Ranges, ranges...)
-	}
-
-	names := make([]string, 0, len(byName))
-	for name := range byName {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		set.Providers = append(set.Providers, *byName[name])
-	}
-
-	if len(set.Providers) == 0 {
-		return set, fmt.Errorf("error: no cloud provider ranges could be retrieved (%s)",
-			strings.Join(set.Failed, "; "))
-	}
-
-	cachedSet = &set
-	return set, nil
-}
-
-// Reset clears the in-process cache. Tests use it; nothing else should.
-func Reset() {
-	setMu.Lock()
-	defer setMu.Unlock()
-	cachedSet = nil
-}
 
 // parseAWS reads the AWS ip-ranges.json publication.
 func parseAWS(data []byte) ([]ProviderRange, error) {
@@ -438,6 +364,3 @@ func requireRanges(ranges []ProviderRange) ([]ProviderRange, error) {
 	}
 	return ranges, nil
 }
-
-// httpClient is used for every range fetch.
-var httpClient = &http.Client{Timeout: 30 * time.Second}

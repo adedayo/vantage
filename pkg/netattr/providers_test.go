@@ -19,10 +19,8 @@ func withSources(t *testing.T, sources ...providerSource) {
 	t.Helper()
 	original := providerSources
 	providerSources = sources
-	Reset()
 	t.Cleanup(func() {
 		providerSources = original
-		Reset()
 	})
 }
 
@@ -47,7 +45,7 @@ func TestLoadCollectsRangesAndReportsCompleteCoverage(t *testing.T) {
 
 	withSources(t, source("Example Cloud", at(server.URL, parsePlainList)))
 
-	set, err := Load(context.Background())
+	set, err := NewLoader(nil, nil).Load(context.Background())
 	require.NoError(t, err)
 
 	assert.True(t, set.Complete())
@@ -80,7 +78,7 @@ func TestLoadReportsPartialFailureWithoutFailingTheRun(t *testing.T) {
 		source("Broken Cloud", at(bad.URL, parsePlainList)),
 	)
 
-	set, err := Load(context.Background())
+	set, err := NewLoader(nil, nil).Load(context.Background())
 	require.NoError(t, err, "one failed source must not fail the whole load")
 
 	assert.False(t, set.Complete())
@@ -103,7 +101,7 @@ func TestLoadTreatsAnUnparseableSourceAsAFailure(t *testing.T) {
 		return nil, fmt.Errorf("unrecognised format")
 	})))
 
-	_, err := Load(context.Background())
+	_, err := NewLoader(nil, nil).Load(context.Background())
 	require.Error(t, err, "no usable provider means the check cannot proceed")
 	assert.Contains(t, err.Error(), "Reshaped Cloud")
 	assert.Contains(t, err.Error(), "unrecognised format")
@@ -118,7 +116,7 @@ func TestLoadFailsWhenEverySourceIsUnavailable(t *testing.T) {
 
 	withSources(t, source("Example Cloud", at(url, parsePlainList)))
 
-	_, err := Load(context.Background())
+	_, err := NewLoader(nil, nil).Load(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no cloud provider ranges could be retrieved")
 }
@@ -134,7 +132,7 @@ func TestLoadReportsStaleDataWhenTheSourceCannotBeRefreshed(t *testing.T) {
 	withSources(t, source("Example Cloud", at(url, parsePlainList)))
 
 	// Populate the cache, age it beyond the TTL, then take the source away.
-	_, err := Load(context.Background())
+	_, err := NewLoader(nil, nil).Load(context.Background())
 	require.NoError(t, err)
 
 	path, err := cachePath(url)
@@ -142,9 +140,8 @@ func TestLoadReportsStaleDataWhenTheSourceCannotBeRefreshed(t *testing.T) {
 	old := time.Now().Add(-CacheTTL - 48*time.Hour)
 	require.NoError(t, os.Chtimes(path, old, old))
 	server.Close()
-	Reset()
 
-	set, err := Load(context.Background())
+	set, err := NewLoader(nil, nil).Load(context.Background())
 	require.NoError(t, err)
 
 	// Coverage is not incomplete — the data is usable — but it was not
@@ -170,7 +167,7 @@ func TestLoadMemoisesForTheProcess(t *testing.T) {
 	withSources(t, source("Example Cloud", at(server.URL, parsePlainList)))
 
 	for range 3 {
-		_, err := Load(context.Background())
+		_, err := NewLoader(nil, nil).Load(context.Background())
 		require.NoError(t, err)
 	}
 	assert.Equal(t, 1, requests)
@@ -195,7 +192,7 @@ func TestLoadMergesSourcesSharingAProviderName(t *testing.T) {
 		source("Example Cloud", at(v6.URL, parsePlainList)),
 	)
 
-	set, err := Load(context.Background())
+	set, err := NewLoader(nil, nil).Load(context.Background())
 	require.NoError(t, err)
 
 	require.Len(t, set.Providers, 1, "one operator must not appear twice")
@@ -216,7 +213,7 @@ func TestLookupPrefersSpecialPurposeSpaceOverAProviderClaim(t *testing.T) {
 
 	withSources(t, source("Confused Cloud", at(server.URL, parsePlainList)))
 
-	set, err := Load(context.Background())
+	set, err := NewLoader(nil, nil).Load(context.Background())
 	require.NoError(t, err)
 
 	got := set.Lookup(netip.MustParseAddr("203.0.113.9"))
@@ -245,7 +242,7 @@ func TestLoadFallsBackToTheNextEndpoint(t *testing.T) {
 		at(fallback.URL, parsePlainList),
 	))
 
-	set, err := Load(context.Background())
+	set, err := NewLoader(nil, nil).Load(context.Background())
 	require.NoError(t, err)
 
 	assert.True(t, set.Complete(), "a working fallback means coverage is not incomplete")
@@ -279,7 +276,7 @@ func TestLoadDoesNotUseAFallbackWhenThePrimaryAnswers(t *testing.T) {
 		at(fallback.URL, parsePlainList),
 	))
 
-	_, err := Load(context.Background())
+	_, err := NewLoader(nil, nil).Load(context.Background())
 	require.NoError(t, err)
 	assert.Zero(t, fallbackCalls)
 }
@@ -304,7 +301,7 @@ func TestLoadFallsBackWhenThePrimaryCannotBeParsed(t *testing.T) {
 		at(fallback.URL, parsePlainList),
 	))
 
-	set, err := Load(context.Background())
+	set, err := NewLoader(nil, nil).Load(context.Background())
 	require.NoError(t, err)
 	assert.True(t, set.Complete())
 	assert.Equal(t, "Example Cloud", set.Lookup(netip.MustParseAddr("52.1.2.3")).Provider)
@@ -329,7 +326,7 @@ func TestLoadNamesEveryEndpointFailure(t *testing.T) {
 		at(second.URL, parsePlainList),
 	))
 
-	set, err := Load(context.Background())
+	set, err := NewLoader(nil, nil).Load(context.Background())
 	require.Error(t, err)
 	require.Len(t, set.Failed, 1)
 	assert.Contains(t, set.Failed[0], "502")
@@ -346,7 +343,7 @@ func TestLoadRecordsProvenanceForEverySource(t *testing.T) {
 
 	withSources(t, source("Example Cloud", at(server.URL, parsePlainList)))
 
-	set, err := Load(context.Background())
+	set, err := NewLoader(nil, nil).Load(context.Background())
 	require.NoError(t, err)
 
 	require.Len(t, set.Provenance, 1)

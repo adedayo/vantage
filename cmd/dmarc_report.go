@@ -24,8 +24,8 @@ that the policy is sufficiently strict to protect against spoofing.`,
 		ctx := context.Background()
 		domain := args[0]
 
-		policy, pErr := scanner.LookupDMARC(ctx, domain)
-		rua, ruf, rErr := scanner.ParseDMARCReporting(ctx, domain)
+		policy, pErr := scanner.LookupDMARC(ctx, dnsClient, domain)
+		rua, ruf, rErr := scanner.ParseDMARCReporting(ctx, dnsClient, domain)
 
 		if pErr != nil && rErr != nil {
 			fmt.Fprintln(os.Stderr, "no DMARC record found:", pErr)

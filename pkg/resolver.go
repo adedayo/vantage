@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 )
 
 // DefaultPort is the port assumed when a resolver address omits one.
@@ -35,67 +34,6 @@ var FallbackResolvers = []string{
 	"8.8.8.8:53",                // Google
 	"9.9.9.9:53",                // Quad9
 	"[2606:4700:4700::1111]:53", // Cloudflare IPv6
-}
-
-var (
-	resolverMu sync.RWMutex
-	// overrideResolvers, when non-empty, takes precedence over discovery.
-	overrideResolvers []string
-	// cachedResolvers holds the result of discovery so that the (potentially
-	// syscall-heavy) platform lookup is performed at most once.
-	cachedResolvers []string
-)
-
-// SetResolvers overrides the resolvers used for all DNS queries. Addresses may
-// be given with or without a port; port 53 is assumed when omitted. Calling it
-// with no arguments clears the override and restores platform auto-discovery.
-func SetResolvers(servers ...string) {
-	resolverMu.Lock()
-	defer resolverMu.Unlock()
-	overrideResolvers = normaliseServers(servers)
-}
-
-// ResetResolverCache clears the cached auto-discovered resolvers, forcing the
-// next query to re-read the platform configuration. Useful for long-running
-// processes whose network configuration may change.
-func ResetResolverCache() {
-	resolverMu.Lock()
-	defer resolverMu.Unlock()
-	cachedResolvers = nil
-}
-
-// Resolvers returns the ordered list of resolver addresses ("host:port") that
-// will be used for DNS queries. Resolution order is:
-//
-//  1. Explicit override set via SetResolvers (e.g. the --resolver CLI flag).
-//  2. The VANTAGE_RESOLVERS environment variable, or DNSAUDIT_RESOLVERS if
-//     only the latter is set.
-//  3. Platform-specific system configuration:
-//     - Unix-like (Linux, macOS, BSD): /etc/resolv.conf
-//     - Windows: GetAdaptersAddresses (IP Helper API)
-//  4. Well-known public resolvers (FallbackResolvers).
-//
-// This layered approach makes the tool platform independent: it works on Linux,
-// macOS and Windows, and degrades gracefully rather than failing when no system
-// configuration is available.
-func Resolvers() []string {
-	resolverMu.RLock()
-	if len(overrideResolvers) > 0 {
-		defer resolverMu.RUnlock()
-		return append([]string(nil), overrideResolvers...)
-	}
-	if len(cachedResolvers) > 0 {
-		defer resolverMu.RUnlock()
-		return append([]string(nil), cachedResolvers...)
-	}
-	resolverMu.RUnlock()
-
-	resolverMu.Lock()
-	defer resolverMu.Unlock()
-	if len(cachedResolvers) == 0 {
-		cachedResolvers = discoverResolvers()
-	}
-	return append([]string(nil), cachedResolvers...)
 }
 
 // discoverResolvers performs the environment then platform then fallback lookup.

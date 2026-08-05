@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	vantage "github.com/adedayo/vantage/pkg"
 	"github.com/adedayo/vantage/pkg/finding"
 	"github.com/adedayo/vantage/pkg/report"
 )
@@ -144,6 +145,10 @@ func TestJoinOr(t *testing.T) {
 }
 
 func TestNewResultCarriesToolMetadata(t *testing.T) {
+	prev := dnsClient
+	t.Cleanup(func() { dnsClient = prev })
+	dnsClient = vantage.NewClient(vantage.Config{Servers: []string{"9.9.9.9:53"}})
+
 	result := newResult()
 	assert.Equal(t, "vantage", result.Tool.Name)
 	assert.Equal(t, finding.SchemaVersion, result.SchemaVersion)

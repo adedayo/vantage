@@ -21,7 +21,7 @@ shadow infrastructure or unauthorised systems.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
-		ptr, err := scanner.ReverseLookupPTR(ctx, args[0])
+		ptr, err := scanner.ReverseLookupPTR(ctx, dnsClient, args[0])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return err

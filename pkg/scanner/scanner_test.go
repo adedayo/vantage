@@ -49,7 +49,7 @@ func TestLookupSPF_NotFound(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	_, err := scanner.LookupSPFWithServer(context.Background(), "example.test", addr)
+	_, err := scanner.LookupSPFWithServer(context.Background(), testResolver, "example.test", addr)
 	assert.Error(t, err)
 }
 
@@ -68,7 +68,7 @@ func TestLookupSPF_Found(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	result, err := scanner.LookupSPFWithServer(context.Background(), "spf.test", addr)
+	result, err := scanner.LookupSPFWithServer(context.Background(), testResolver, "spf.test", addr)
 	require.NoError(t, err)
 	assert.Contains(t, result, "v=spf1")
 }
@@ -90,7 +90,7 @@ func TestLookupDMARC_Reject(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	policy, err := scanner.LookupDMARCWithServer(context.Background(), "secure.test", addr)
+	policy, err := scanner.LookupDMARCWithServer(context.Background(), testResolver, "secure.test", addr)
 	require.NoError(t, err)
 	assert.Equal(t, "reject", policy)
 }
@@ -105,7 +105,7 @@ func TestLookupDMARC_NotFound(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	_, err := scanner.LookupDMARCWithServer(context.Background(), "none.test", addr)
+	_, err := scanner.LookupDMARCWithServer(context.Background(), testResolver, "none.test", addr)
 	assert.Error(t, err)
 }
 
@@ -126,7 +126,7 @@ func TestParseDMARCReporting(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	rua, ruf, err := scanner.ParseDMARCReportingWithServer(context.Background(), "report.test", addr)
+	rua, ruf, err := scanner.ParseDMARCReportingWithServer(context.Background(), testResolver, "report.test", addr)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"mailto:agg@report.test"}, rua)
 	assert.Equal(t, []string{"mailto:fail@report.test"}, ruf)
@@ -149,7 +149,7 @@ func TestCheckMTASts_Found(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	result, err := scanner.CheckMTAStsWithServer(context.Background(), "sts.test", addr)
+	result, err := scanner.CheckMTAStsWithServer(context.Background(), testResolver, "sts.test", addr)
 	require.NoError(t, err)
 	assert.Contains(t, result, "STSv1")
 }
@@ -173,7 +173,7 @@ func TestLookupCAA_Found(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	records, err := scanner.LookupCAAWithServer(context.Background(), "caa.test", addr)
+	records, err := scanner.LookupCAAWithServer(context.Background(), testResolver, "caa.test", addr)
 	require.NoError(t, err)
 	require.Len(t, records, 1)
 	assert.Equal(t, "0 issue letsencrypt.org", records[0])
@@ -189,7 +189,7 @@ func TestLookupCAA_NotFound(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	_, err := scanner.LookupCAAWithServer(context.Background(), "nocaa.test", addr)
+	_, err := scanner.LookupCAAWithServer(context.Background(), testResolver, "nocaa.test", addr)
 	assert.Error(t, err)
 }
 
@@ -213,7 +213,7 @@ func TestLookupTLSAHTTPS_Found(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	result, err := scanner.LookupTLSAHTTPSWithServer(context.Background(), "https.test", addr)
+	result, err := scanner.LookupTLSAHTTPSWithServer(context.Background(), testResolver, "https.test", addr)
 	require.NoError(t, err)
 	assert.Contains(t, result, "3 1 1")
 }
@@ -238,7 +238,7 @@ func TestLookupTLSASSH_Found(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	result, err := scanner.LookupTLSASSHWithServer(context.Background(), "ssh.test", addr)
+	result, err := scanner.LookupTLSASSHWithServer(context.Background(), testResolver, "ssh.test", addr)
 	require.NoError(t, err)
 	assert.Contains(t, result, "3 1 2")
 }
@@ -263,7 +263,7 @@ func TestLookupTLASSMTP_Found(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	result, err := scanner.LookupTLASSMTPWithServer(context.Background(), "smtp.test", addr)
+	result, err := scanner.LookupTLASSMTPWithServer(context.Background(), testResolver, "smtp.test", addr)
 	require.NoError(t, err)
 	assert.Contains(t, result, "2 0 1")
 }
@@ -288,7 +288,7 @@ func TestVerifyNSSEC_Found(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	found, err := scanner.VerifyNSSECWithServer(context.Background(), "nsec.test", addr)
+	found, err := scanner.VerifyNSSECWithServer(context.Background(), testResolver, "nsec.test", addr)
 	require.NoError(t, err)
 	assert.True(t, found)
 }
@@ -303,7 +303,7 @@ func TestVerifyNSSEC_NotFound(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	found, err := scanner.VerifyNSSECWithServer(context.Background(), "nodnssec.test", addr)
+	found, err := scanner.VerifyNSSECWithServer(context.Background(), testResolver, "nodnssec.test", addr)
 	require.NoError(t, err)
 	assert.False(t, found)
 }
@@ -351,7 +351,7 @@ func TestCheckDNSBL_Listed(t *testing.T) {
 	defer stop()
 
 	// Pass IP directly (bypassing net.LookupIP)
-	listed, err := scanner.CheckDNSBLWithServer(context.Background(), net.ParseIP("127.0.0.2"), blocklist, addr)
+	listed, err := scanner.CheckDNSBLWithServer(context.Background(), testResolver, net.ParseIP("127.0.0.2"), blocklist, addr)
 	require.NoError(t, err)
 	assert.True(t, listed)
 }
@@ -369,7 +369,7 @@ func TestCheckDNSBL_NotListed(t *testing.T) {
 	addr, stop := startMockDNS(t, mux)
 	defer stop()
 
-	listed, err := scanner.CheckDNSBLWithServer(context.Background(), net.ParseIP("127.0.0.2"), blocklist, addr)
+	listed, err := scanner.CheckDNSBLWithServer(context.Background(), testResolver, net.ParseIP("127.0.0.2"), blocklist, addr)
 	require.NoError(t, err)
 	assert.False(t, listed)
 }

@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 
@@ -53,8 +55,13 @@ Only passive DNS queries are made. You are responsible for having authority to
 assess the domains you target.`,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		assessor, err := newAssessor()
+		if err != nil {
+			return err
+		}
+
 		if auditListChecks {
-			return listChecks()
+			return listChecks(cmd.Context(), assessor)
 		}
 
 		profile, err := audit.ParseProfile(auditProfile)
@@ -66,12 +73,16 @@ assess the domains you target.`,
 			return withExitCode(ExitUsage, err)
 		}
 
-		checks, err := audit.Selection{
+		selection := audit.Selection{
 			Profile:   profile,
 			Only:      auditChecks,
 			Skip:      auditSkipChecks,
 			NoNetwork: auditNoNetwork,
-		}.Resolve()
+		}
+		// Resolved here as well as inside Assess so that a bad selection fails
+		// with exit code 2 before any target is read, rather than as a generic
+		// runtime error after the operator has waited.
+		checks, err := selection.Resolve()
 		if err != nil {
 			return withExitCode(ExitUsage, err)
 		}
@@ -90,33 +101,45 @@ assess the domains you target.`,
 			return err
 		}
 
-		runner := &audit.Runner{
-			Checks:              checks,
-			Concurrency:         auditConcurrency,
-			CheckConcurrency:    auditCheckConcurrency,
-			NoNetwork:           auditNoNetwork,
+		req := audit.Request{
+			Targets:             targets,
+			Selection:           selection,
 			Hosts:               hosts,
 			Enumerate:           auditEnumerate,
 			ExpectJurisdictions: auditExpectJurisdictions,
+			Concurrency:         auditConcurrency,
+			CheckConcurrency:    auditCheckConcurrency,
 		}
 		// Progress goes to stderr so that redirecting stdout still yields a
 		// clean document, and is suppressed for structured output and when
 		// stdout is not a terminal.
 		if showProgress(len(targets)) {
-			runner.Progress = func(target string, done, total int) {
-				fmt.Fprintf(os.Stderr, "\r  assessed %d/%d (%s)%s", done, total, target, strings.Repeat(" ", 12))
-				if done == total {
-					fmt.Fprintln(os.Stderr)
-				}
-			}
+			req.Observer = progressWriter(os.Stderr, len(targets))
 		}
 
-		result := newResult()
-		if err := runner.Run(context.Background(), result, targets...); err != nil {
+		result, err := assessor.Assess(cmd.Context(), req)
+		if err != nil {
 			return withExitCode(ExitError, err)
 		}
 		return emit(result)
 	},
+}
+
+// newAssessor builds the library entry point from the process's configuration.
+//
+// The CLI goes through the same embedding contract as any other consumer. That
+// is the point of doing it: an interface with one implementation and one caller
+// is a guess about what embedders need, and the shape of Request and
+// Capabilities is only trustworthy once something else has had to live with it.
+// Where the CLI needs a private hook, the interface is wrong.
+func newAssessor() (audit.Assessor, error) {
+	v, _, _ := buildInfo()
+	a, err := audit.NewAssessor(dnsClient, audit.WithVersion(v))
+	if err != nil {
+		// A missing resolver is a configuration fault, not a target failure.
+		return nil, withExitCode(ExitError, err)
+	}
+	return a, nil
 }
 
 // collectHosts gathers the hostnames to assess for subdomain takeover.
@@ -204,32 +227,76 @@ func readTargetLines(scanner *bufio.Scanner) ([]string, error) {
 }
 
 // showProgress reports whether to draw a progress indicator.
+//
+// A single target now qualifies. It did not when progress was reported only on
+// target completion, because the single event arrived as the run ended; with
+// per-check reporting there is something to show throughout, and a lone
+// domain assessed with the deep profile is exactly when a user most wants to
+// see that the tool is still working.
 func showProgress(targets int) bool {
 	if !auditProgress || quiet || structuredOutput() {
 		return false
 	}
-	return targets > 1 && isTerminal(os.Stderr)
+	return targets > 0 && isTerminal(os.Stderr)
+}
+
+// progressWriter renders progress events as a single rewritten line on w.
+//
+// Only completion events are drawn. Reporting a check as it starts would make
+// the line flicker between checks that finish instantly, and would overstate
+// advancement: a check that has started has assessed nothing yet.
+func progressWriter(w io.Writer, totalTargets int) func(audit.Progress) {
+	var mu sync.Mutex
+	return func(p audit.Progress) {
+		if p.Phase == audit.PhaseTargetStarted {
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+
+		if totalTargets == 1 {
+			fmt.Fprintf(w, "\r  %s: %d/%d checks%s",
+				p.Target, p.ChecksDone, p.ChecksTotal, strings.Repeat(" ", 12))
+		} else {
+			fmt.Fprintf(w, "\r  assessed %d/%d (%s)%s",
+				p.TargetsDone, p.TargetsTotal, p.Target, strings.Repeat(" ", 12))
+		}
+		if p.Phase == audit.PhaseTargetCompleted && p.TargetsDone == p.TargetsTotal {
+			fmt.Fprintln(w)
+		}
+	}
 }
 
 // listChecks prints the registered checks and what they cost.
-func listChecks() error {
-	fmt.Printf("%-10s %-12s %-9s %s\n", "CHECK", "EGRESS", "QUERIES", "SUMMARY")
-	for _, d := range audit.Descriptions() {
-		egress := make([]string, 0, len(d.Network))
-		for _, n := range d.Network {
-			egress = append(egress, string(n))
-		}
-		fmt.Printf("%-10s %-12s %-9d %s\n",
-			d.Name, strings.Join(egress, ","), d.TypicalQueries, d.Summary)
+//
+// It reads the assessor's catalogue rather than the package registry, so that
+// what the CLI advertises is exactly what an embedding consumer would be told.
+// If those two could differ, --list-checks would be documentation rather than
+// evidence.
+//
+// The blast radius shown is generated from each check's declared egress
+// profile, not maintained alongside it, so it cannot describe a check as
+// touching less than it does.
+func listChecks(ctx context.Context, assessor audit.Assessor) error {
+	caps, err := assessor.Catalogue(ctx)
+	if err != nil {
+		return withExitCode(ExitError, err)
+	}
+
+	fmt.Printf("%-10s %-9s %-46s %s\n", "CHECK", "QUERIES", "EGRESS", "SUMMARY")
+	for _, c := range caps.Checks {
+		fmt.Printf("%-10s %-9d %-46s %s\n",
+			c.Name, c.TypicalQueries, c.Egress.Describe(), c.Summary)
+	}
+
+	if len(caps.ThirdPartyEndpoints) > 0 {
+		fmt.Printf("\nTHIRD-PARTY ENDPOINTS\n%s\n",
+			strings.Join(caps.ThirdPartyEndpoints, ", "))
 	}
 
 	fmt.Printf("\n%-10s %s\n", "PROFILE", "CONTENTS")
-	for _, name := range audit.Profiles() {
-		p, err := audit.ParseProfile(name)
-		if err != nil {
-			continue
-		}
-		fmt.Printf("%-10s %s\n", name, p.Summary())
+	for _, p := range caps.Profiles {
+		fmt.Printf("%-10s %s\n", p.Name, p.Summary)
 	}
 	return nil
 }
