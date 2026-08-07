@@ -47,10 +47,15 @@ type cacheEntry struct {
 // downstream check to the hosts the operator happened to name on the command
 // line, without saying that is what happened.
 func Enumerate(ctx context.Context, src Source, domain string) (Result, error) {
+	return EnumerateWith(ctx, src, domain, CollectOptions{})
+}
+
+// EnumerateWith is Enumerate with the inference bounds made explicit.
+func EnumerateWith(ctx context.Context, src Source, domain string, opts CollectOptions) (Result, error) {
 	domain = normaliseName(domain)
 
 	if entry, err := readCache(src.Name(), domain, CacheTTL); err == nil {
-		result := Collect(domain, entry.Certificates)
+		result := CollectWith(domain, entry.Certificates, opts)
 		result.Source = src.Name() + " (cached " + entry.Fetched.Format(time.RFC3339) + ")"
 		return result, nil
 	}
@@ -58,7 +63,7 @@ func Enumerate(ctx context.Context, src Source, domain string) (Result, error) {
 	certs, err := src.Search(ctx, domain)
 	if err != nil {
 		if entry, cacheErr := readCache(src.Name(), domain, 0); cacheErr == nil {
-			result := Collect(domain, entry.Certificates)
+			result := CollectWith(domain, entry.Certificates, opts)
 			result.Source = src.Name() + " (stale cache from " +
 				entry.Fetched.Format(time.RFC3339) + "; the source was unreachable)"
 			return result, nil
@@ -72,7 +77,7 @@ func Enumerate(ctx context.Context, src Source, domain string) (Result, error) {
 		Source: src.Name(), Fetched: time.Now().UTC(), Certificates: certs,
 	})
 
-	result := Collect(domain, certs)
+	result := CollectWith(domain, certs, opts)
 	result.Source = src.Name()
 	return result, nil
 }

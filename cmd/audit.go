@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/adedayo/vantage/pkg/audit"
+	"github.com/adedayo/vantage/pkg/ct"
 )
 
 var (
@@ -31,6 +32,10 @@ var (
 	auditHostsFile        string
 
 	auditEnumerate           bool
+	auditPivot               bool
+	auditPivotDepth          int
+	auditPivotBudget         int
+	auditPivotMaxSANs        int
 	auditExpectJurisdictions []string
 )
 
@@ -106,6 +111,10 @@ assess the domains you target.`,
 			Selection:           selection,
 			Hosts:               hosts,
 			Enumerate:           auditEnumerate,
+			Pivot:               auditPivot,
+			PivotDepth:          auditPivotDepth,
+			PivotBudget:         auditPivotBudget,
+			PivotMaxSANs:        auditPivotMaxSANs,
 			ExpectJurisdictions: auditExpectJurisdictions,
 			Concurrency:         auditConcurrency,
 			CheckConcurrency:    auditCheckConcurrency,
@@ -333,6 +342,18 @@ func init() {
 	f.BoolVar(&auditEnumerate, "enumerate", false,
 		"Discover additional hostnames from Certificate Transparency logs and assess them too. "+
 			"This queries a third-party log service.")
+	f.BoolVar(&auditPivot, "pivot", false,
+		"Follow certificate co-tenancy outwards: registrable domains sharing a certificate with a "+
+			"target are treated as targets and assessed in full. Implies --enumerate behaviour for "+
+			"the domains discovered. Only use this on domains you are authorised to assess.")
+	f.IntVar(&auditPivotDepth, "pivot-depth", ct.DefaultPivotDepth,
+		"How many hops of certificate co-tenancy to follow when pivoting.")
+	f.IntVar(&auditPivotBudget, "pivot-budget", ct.DefaultPivotBudget,
+		"Maximum number of domains to enumerate while pivoting, including the ones supplied.")
+	f.IntVar(&auditPivotMaxSANs, "pivot-max-sans", ct.DefaultMaxSANsForRelation,
+		"Largest certificate, by number of names on it, from which shared ownership is inferred. "+
+			"Raising this finds more related domains but admits shared-hosting neighbours that "+
+			"merely sat on the same certificate.")
 	f.StringSliceVar(&auditExpectJurisdictions, "expect-jurisdiction", nil,
 		"ISO 3166-1 alpha-2 country codes infrastructure is expected to be hosted in, e.g. GB,IE. "+
 			"Without this, the jurisdiction rule is not evaluated.")

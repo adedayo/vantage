@@ -196,6 +196,17 @@ type Finding struct {
 	Description string `json:"description"`
 	// Evidence justifies the finding.
 	Evidence []Evidence `json:"evidence,omitempty"`
+	// Basis names how a derived conclusion was reached, when the finding rests
+	// on an inference rather than a direct observation.
+	//
+	// It is separate from Evidence because Evidence is what was seen, and a
+	// statement of method is not. Carrying method as though it were an
+	// observation puts "mimecast.com" and "registrable domain of the exchanger
+	// names" in the same register, which reads as though the tool measured
+	// both — and leaves the reader to work out that one is a caveat on the
+	// other. Keeping it separate also lets a consumer present the caveat
+	// differently, or omit it, without string-matching key names.
+	Basis string `json:"basis,omitempty"`
 	// Remediation describes how to fix the issue. Sourced from the catalogue so
 	// that guidance is reviewed and version-controlled.
 	Remediation string `json:"remediation,omitempty"`
@@ -259,6 +270,12 @@ func (f Finding) WithDescription(extra string) Finding {
 	if extra != "" {
 		f.Description = strings.TrimSpace(f.Description) + " " + strings.TrimSpace(extra)
 	}
+	return f
+}
+
+// WithBasis returns a copy of f recording how a derived conclusion was reached.
+func (f Finding) WithBasis(basis string) Finding {
+	f.Basis = strings.TrimSpace(basis)
 	return f
 }
 

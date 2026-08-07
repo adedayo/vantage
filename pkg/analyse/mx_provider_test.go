@@ -72,3 +72,27 @@ func TestMXSingleProviderDownConfidencesSelfNamedExchangers(t *testing.T) {
 	}
 	require.Equal(t, "low", confidence)
 }
+
+// How the operator was determined is a caveat on the evidence, not a piece of
+// it. Carried as evidence it read as though "registrable domain of the
+// exchanger names" had been measured alongside "mimecast.com", which is
+// exactly the confusion that made the advisory hard to interpret.
+func TestMXSingleProviderCarriesItsInferenceAsBasisNotEvidence(t *testing.T) {
+	hosts := []MXHost{
+		{Preference: 10, Host: "alt1.aspmx.l.google.com", Resolves: true, Provider: "google.com"},
+		{Preference: 20, Host: "alt2.aspmx.l.google.com", Resolves: true, Provider: "google.com"},
+	}
+
+	for _, f := range MX(Origin{Target: "example.com"}, hosts, true) {
+		if f.ID != "SURF-MX-005" {
+			continue
+		}
+		require.NotEmpty(t, f.Basis, "the inference must still be disclosed")
+		for _, e := range f.Evidence {
+			assert.NotContains(t, e.Name, "_basis",
+				"method must not be presented as an observation")
+		}
+		return
+	}
+	t.Fatal("expected SURF-MX-005")
+}

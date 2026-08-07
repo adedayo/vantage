@@ -94,6 +94,13 @@ func renderText(w io.Writer, result *finding.Result, opts Options) error {
 		for _, e := range f.Evidence {
 			fmt.Fprintf(w, "%s%s %s\n", detailIndent, paint(ansiDim, "Evidence:"), evidenceLine(e))
 		}
+		// Rendered after the evidence and labelled distinctly, because it
+		// qualifies what the evidence supports rather than adding to it.
+		if f.Basis != "" && !opts.Quiet {
+			const basisLabel = "Basis: "
+			fmt.Fprintf(w, "%s%s%s\n", detailIndent, paint(ansiDim, basisLabel),
+				wrap(f.Basis, textWidth-len(detailIndent)-len(basisLabel), detailIndent))
+		}
 		if f.Remediation != "" && !opts.Quiet {
 			const fixLabel = "Fix: "
 			fmt.Fprintf(w, "%s%s%s\n", detailIndent, paint(ansiDim, fixLabel),

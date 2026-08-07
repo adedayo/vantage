@@ -129,8 +129,9 @@ func mxSingleProvider(o Origin, hosts []MXHost) []finding.Finding {
 
 	f := finding.New("SURF-MX-005", o.Target,
 		finding.ComputedEvidence("mx.provider", provider),
-		finding.ComputedEvidence("mx.hosts", strings.Join(names, ", ")),
-		finding.ComputedEvidence("mx.provider_basis", "registrable domain of the exchanger names"))
+		finding.ComputedEvidence("mx.hosts", strings.Join(names, ", "))).
+		WithBasis("The operator is inferred from the registrable domain of the " +
+			"exchanger hostnames, not observed directly.")
 
 	// Exchangers named inside the organisation's own domain say nothing about
 	// who runs them: mail.example.com may be self-hosted or may be a vanity

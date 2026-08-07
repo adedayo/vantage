@@ -32,7 +32,14 @@ func sourceFor(c *Cache) ct.Source {
 // against the target's nameservers, which is precisely the behaviour spec 012
 // requires this tool to avoid. The bound is applied after sorting, so the set
 // assessed is deterministic rather than whatever the log returned first.
-const maxCTHosts = 200
+//
+// A thousand covers the certificate history of all but the largest estates.
+// The bound is not removed altogether because the cost of doing so is not paid
+// by this tool: it is paid by the target's nameservers, and an audit that
+// resolves ten thousand names in a burst is indistinguishable from the
+// reconnaissance phase of an attack. Where the limit does bite, Truncated
+// records it so the report says so rather than quietly under-reporting.
+const maxCTHosts = 1000
 
 // enumerateCT discovers names from Certificate Transparency and establishes
 // whether each still resolves.
@@ -49,6 +56,7 @@ func enumerateCT(ctx context.Context, c *Cache, domain string) (analyse.CTObserv
 		Source:           result.Source,
 		WildcardNames:    result.WildcardNames,
 		CertificateCount: len(result.Certificates),
+		Discovered:       len(result.Hosts),
 	}
 
 	latest := latestExpiry(result.Certificates)

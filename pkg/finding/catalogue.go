@@ -1338,6 +1338,30 @@ var catalogue = index([]Entry{
 		},
 		Tags: []string{TagPKI},
 	},
+	{
+		ID:         "SURF-CT-004",
+		Check:      "ct",
+		Title:      "Related domains discovered through shared certificates",
+		Severity:   SeverityInfo,
+		Confidence: ConfidenceMedium,
+		Description: "These registrable domains were named on the same certificates as the domain " +
+			"assessed, which usually means one organisation controls both: a certificate authority " +
+			"was asked to certify them together, and whoever held the private key controlled every " +
+			"name on it. They have been assessed alongside the domain given. The inference is not " +
+			"proof of common ownership — shared hosting can bundle unrelated customers onto one " +
+			"certificate — so the list is drawn only from certificates small enough for co-tenancy " +
+			"to be meaningful.",
+		Remediation: "Confirm each domain belongs to the organisation and is covered by the same " +
+			"security expectations as the primary estate. Domains that are genuinely yours but " +
+			"were not on the asset register are the finding here: unmanaged domains accumulate " +
+			"expired certificates, stale DNS and dangling delegations precisely because nobody " +
+			"is looking at them. Domains that are not yours should be excluded from future runs.",
+		References: []string{
+			"https://www.rfc-editor.org/rfc/rfc6962",
+			"https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/01-Conduct_Search_Engine_Discovery_Reconnaissance_for_Information_Leakage",
+		},
+		Tags: []string{TagPKI},
+	},
 })
 
 // index converts the declarative slice above into a lookup map, panicking on

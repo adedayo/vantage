@@ -62,6 +62,21 @@ type Runner struct {
 	// before the checks run, so that names the operator never listed are
 	// assessed too. It is opt-in because it queries a third party.
 	Enumerate bool
+	// Pivot follows certificate co-tenancy outwards, treating registrable
+	// domains that share a certificate with a target as further targets and
+	// assessing them in full.
+	//
+	// It is separate from Enumerate because it asks a different question of
+	// the operator. Enumerate stays inside a zone whose assessment has already
+	// been authorised by naming it; Pivot crosses into domains the operator
+	// did not name, which they must have authority over independently.
+	Pivot bool
+	// PivotDepth and PivotBudget bound the walk. Zero means the ct package
+	// defaults.
+	PivotDepth, PivotBudget int
+	// PivotMaxSANs overrides how large a certificate may be before co-tenancy
+	// stops implying common ownership. Zero means the ct package default.
+	PivotMaxSANs int
 	// ExpectJurisdictions are the ISO 3166-1 alpha-2 countries the operator
 	// declares their infrastructure should be in.
 	ExpectJurisdictions []string
@@ -106,6 +121,15 @@ func (r *Runner) Run(ctx context.Context, result *finding.Result, targets ...str
 	targets = normaliseTargets(targets)
 	if len(targets) == 0 {
 		return errors.New("error: no targets supplied")
+	}
+
+	// Pivoting widens the target list before anything is assessed, so that a
+	// discovered sibling receives the same checks as a domain the operator
+	// typed. Doing it here rather than per-target keeps the widened set
+	// de-duplicated across targets: two domains in one group would otherwise
+	// each pull in the same siblings.
+	if r.Pivot && !r.NoNetwork {
+		targets = r.expandTargets(ctx, result, targets)
 	}
 
 	concurrency := r.Concurrency

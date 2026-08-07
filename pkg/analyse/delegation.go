@@ -132,8 +132,9 @@ func singleProvider(o Origin, d Delegation) []finding.Finding {
 
 	f := finding.New("SURF-NS-002", o.Target,
 		finding.ComputedEvidence("ns.provider", provider),
-		finding.ComputedEvidence("ns.hosts", strings.Join(hosts, ", ")),
-		finding.ComputedEvidence("ns.provider_basis", "registrable domain of the nameserver names"))
+		finding.ComputedEvidence("ns.hosts", strings.Join(hosts, ", "))).
+		WithBasis("The operator is inferred from the registrable domain of the " +
+			"nameserver hostnames, not observed directly.")
 
 	// Nameservers named inside the zone they serve tell us nothing about who
 	// operates them, so the claim is weaker in that case and must say so.

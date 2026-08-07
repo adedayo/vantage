@@ -67,6 +67,16 @@ type Request struct {
 	// Enumerate discovers further hosts from Certificate Transparency. It is
 	// opt-in because it queries a third party.
 	Enumerate bool
+	// Pivot additionally treats registrable domains that share a certificate
+	// with a target as targets in their own right, assessing them in full.
+	// It is opt-in separately from Enumerate because it assesses domains the
+	// caller did not name, which requires authority they must assert.
+	Pivot bool
+	// PivotDepth and PivotBudget bound the pivot walk. Zero means default.
+	PivotDepth, PivotBudget int
+	// PivotMaxSANs overrides the certificate size above which co-tenancy is
+	// no longer treated as evidence of common ownership. Zero means default.
+	PivotMaxSANs int
 	// ExpectJurisdictions are the ISO 3166-1 alpha-2 countries the operator
 	// declares their infrastructure should be in. Empty means no expectation
 	// was stated, and the jurisdiction rule is then not evaluated.
@@ -205,6 +215,10 @@ func (r *Runner) Assess(ctx context.Context, req Request) (*finding.Result, erro
 		NoNetwork:           req.Selection.NoNetwork,
 		Hosts:               req.Hosts,
 		Enumerate:           req.Enumerate,
+		Pivot:               req.Pivot,
+		PivotDepth:          req.PivotDepth,
+		PivotBudget:         req.PivotBudget,
+		PivotMaxSANs:        req.PivotMaxSANs,
 		ExpectJurisdictions: req.ExpectJurisdictions,
 		Observer:            req.Observer,
 		Version:             r.Version,

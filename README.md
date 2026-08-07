@@ -323,6 +323,34 @@ hostname found in a log is assessed for takeover and attribution like one you
 supplied yourself. Enumeration failing is never fatal: the run continues with
 the names you gave it.
 
+### Pivoting to related domains
+
+`--enumerate` stays inside the zone you named. `--pivot` goes further: a
+registrable domain that appears on the same certificate as your target is
+treated as a target in its own right and assessed in full. Certificates are
+issued to whoever proves control of every name on them, so co-tenancy on a small
+certificate is decent evidence that one organisation holds both.
+
+```sh
+vantage audit example.com --pivot
+```
+
+Discovered domains are reported as `SURF-CT-004`, at informational severity. The
+inference is not proof — shared hosting can bundle unrelated customers onto one
+certificate — so relations are only drawn from certificates small enough for
+co-tenancy to mean something, and the walk is bounded:
+
+| Flag | Purpose |
+|---|---|
+| `--pivot-depth` | Hops of co-tenancy to follow |
+| `--pivot-budget` | Ceiling on domains enumerated, including the ones you supplied |
+| `--pivot-max-sans` | Largest certificate, by name count, from which a relation is inferred |
+
+Raising `--pivot-max-sans` finds more relations and admits more neighbours who
+merely shared a certificate. **Only pivot against domains you are authorised to
+assess** — the flag will happily walk into estates that are not yours, and the
+tool cannot tell the difference.
+
 ### Caches
 
 Provider ranges and CT results are cached under `~/.cache/vantage`

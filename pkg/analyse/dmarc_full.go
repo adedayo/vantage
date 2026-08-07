@@ -2,8 +2,10 @@ package analyse
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	vantage "github.com/adedayo/vantage/pkg"
 	"github.com/adedayo/vantage/pkg/finding"
 )
 
@@ -44,6 +46,33 @@ func dmarcRecords(txts []string) []string {
 		}
 	}
 	return records
+}
+
+// isAbsence reports whether an error means the name definitively has no
+// record, as distinct from the lookup having failed to answer at all.
+//
+// The distinction decides whether a finding may be raised. NXDOMAIN and an
+// empty answer are conclusions about the target; a timeout, an unreachable
+// resolver, or an embedder's scope guard refusing the egress are conclusions
+// about the lookup, and nothing about the target follows from them.
+//
+// The substring fallback exists because DMARCResolver is a consumer-supplied
+// interface: an implementation that predates the sentinels, or that wraps
+// another library's error, still signals absence in the only vocabulary it
+// has. Matching the sentinel first means a conforming implementation is never
+// classified by its wording.
+func isAbsence(err error) bool {
+	if errors.Is(err, vantage.ErrNotFound) {
+		return true
+	}
+	// Never treat a withheld or refused lookup as an absence, whatever its
+	// message happens to contain.
+	if errors.Is(err, vantage.ErrOutOfScope) ||
+		errors.Is(err, vantage.ErrNetworkDisabled) ||
+		errors.Is(err, vantage.ErrResolverUnreachable) {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "not found")
 }
 
 // DMARCFull evaluates DMARC with the two rules that need further lookups:
@@ -102,7 +131,19 @@ func DMARCFull(ctx context.Context, o Origin, r DMARCResolver, records []string,
 
 		name := target + "._report._dmarc." + dest
 		txts, err := r.TXT(ctx, name)
-		if err != nil || len(dmarcRecords(txts)) == 0 {
+		if err != nil && !isAbsence(err) {
+			// The lookup did not answer, so nothing is known about this
+			// destination. Reporting the record as missing would state as fact
+			// something that was never established — and it is the costlier
+			// direction of the two, because it sends an operator to repair
+			// configuration that may well be correct.
+			//
+			// This is the same reasoning that makes a nil resolver return
+			// early rather than raise: an unasked question and an unanswered
+			// one are both silence, and silence is not evidence.
+			continue
+		}
+		if len(dmarcRecords(txts)) == 0 {
 			findings = append(findings, finding.New("SURF-DMARC-006", o.Target, ev,
 				finding.ComputedEvidence("dmarc.report_destination", dest),
 				finding.ComputedEvidence("dmarc.authorisation_record", name)))

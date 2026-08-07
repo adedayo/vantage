@@ -2,11 +2,14 @@ package analyse
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	vantage "github.com/adedayo/vantage/pkg"
 )
 
 // fakeDMARCResolver serves TXT records from a map.
@@ -196,4 +199,75 @@ func TestDMARCFullWithoutResolverStillAppliesRecordRules(t *testing.T) {
 
 	assert.Contains(t, got, "SURF-DMARC-002")
 	assert.NotContains(t, got, "SURF-DMARC-006", "no resolver means no external verification")
+}
+
+// failingDMARCResolver fails every lookup with a supplied error, standing in
+// for a resolver that cannot answer rather than one that answers "no record".
+type failingDMARCResolver struct{ err error }
+
+func (f failingDMARCResolver) TXT(_ context.Context, _ string) ([]string, error) {
+	return nil, f.err
+}
+
+// A lookup that could not be performed must not be reported as a missing
+// record. The two are indistinguishable in the return signature and entirely
+// different in meaning: one is a defect in the target's configuration, the
+// other is a gap in the assessment. Conflating them sends an operator to
+// repair a record that may already be correct — and under a scope guard, which
+// refuses every external destination by construction, it would do so on every
+// single assessment.
+func TestDMARCFullUnansweredLookupIsNotAMissingRecord(t *testing.T) {
+	records := []string{"v=DMARC1; p=reject; rua=mailto:reports@thirdparty.example"}
+
+	failures := map[string]error{
+		"scope guard refused the egress": fmt.Errorf("refused: %w", vantage.ErrOutOfScope),
+		"network withheld by the caller": fmt.Errorf("withheld: %w", vantage.ErrNetworkDisabled),
+		"resolver unreachable":           fmt.Errorf("dial: %w", vantage.ErrResolverUnreachable),
+		"unclassified transport failure": errors.New("error: i/o timeout"),
+	}
+
+	for name, err := range failures {
+		t.Run(name, func(t *testing.T) {
+			got := ids(DMARCFull(context.Background(), Origin{Target: "example.com"},
+				failingDMARCResolver{err: err}, records, "example.com"))
+
+			assert.NotContains(t, got, "SURF-DMARC-006",
+				"an unanswered lookup establishes nothing about the destination")
+		})
+	}
+}
+
+// The converse: a definitive absence must still raise. Suppressing the finding
+// whenever an error is returned would silence the rule altogether, since a
+// resolver reports "no such record" as an error too.
+func TestDMARCFullDefiniteAbsenceStillRaises(t *testing.T) {
+	records := []string{"v=DMARC1; p=reject; rua=mailto:reports@thirdparty.example"}
+
+	absences := map[string]error{
+		"sentinel":              fmt.Errorf("no TXT: %w", vantage.ErrNotFound),
+		"unwrapped not found":   errors.New("error: not found"),
+		"legacy implementation": errors.New("NXDOMAIN: record Not Found"),
+	}
+
+	for name, err := range absences {
+		t.Run(name, func(t *testing.T) {
+			got := ids(DMARCFull(context.Background(), Origin{Target: "example.com"},
+				failingDMARCResolver{err: err}, records, "example.com"))
+
+			assert.Contains(t, got, "SURF-DMARC-006",
+				"a definitive absence is a conclusion about the target")
+		})
+	}
+}
+
+// A scope guard whose refusal message happens to contain "not found" must
+// still be classified by its sentinel, not by its wording.
+func TestDMARCFullSentinelBeatsWording(t *testing.T) {
+	records := []string{"v=DMARC1; p=reject; rua=mailto:reports@thirdparty.example"}
+	err := fmt.Errorf("host not found in scope: %w", vantage.ErrOutOfScope)
+
+	got := ids(DMARCFull(context.Background(), Origin{Target: "example.com"},
+		failingDMARCResolver{err: err}, records, "example.com"))
+
+	assert.NotContains(t, got, "SURF-DMARC-006")
 }

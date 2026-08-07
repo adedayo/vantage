@@ -39,6 +39,10 @@ type CTObservation struct {
 	WildcardNames []string
 	// CertificateCount is how many issuances were examined.
 	CertificateCount int
+	// Discovered is how many distinct in-domain names the logs held, before
+	// any bound on how many were resolved. It differs from len(Hosts) only
+	// when the bound applied.
+	Discovered int
 }
 
 // internalKeywords are the labels that suggest a name was meant for internal
@@ -222,6 +226,16 @@ func CTRecords(obs CTObservation) []string {
 	records = append(records,
 		strconv.Itoa(obs.CertificateCount)+" certificates examined via "+obs.Source,
 		strconv.Itoa(len(obs.Hosts))+" distinct hostnames discovered")
+
+	// Say so when the bound applied. A reader comparing the inventory against
+	// their own asset register needs to know the list is partial, or they will
+	// read a truncated result as a complete one.
+	if obs.Discovered > len(obs.Hosts) {
+		records = append(records,
+			strconv.Itoa(obs.Discovered)+" names were present in the logs; "+
+				"only the first "+strconv.Itoa(len(obs.Hosts))+
+				" were resolved and assessed")
+	}
 
 	for _, h := range obs.Hosts {
 		line := h.Host

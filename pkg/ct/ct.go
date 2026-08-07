@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/publicsuffix"
+
 	d "github.com/adedayo/vantage/pkg"
 )
 
@@ -56,6 +58,42 @@ type Result struct {
 	// WildcardNames are the wildcard identities found, kept separate because
 	// they name no host and must not be resolved as though they did.
 	WildcardNames []string
+	// RelatedDomains are registrable domains outside the searched zone that
+	// shared a certificate with it. They are candidates for the same owner,
+	// not proof of it: see Collect for why the inference is bounded.
+	RelatedDomains []string
+}
+
+// DefaultMaxSANsForRelation is the default largest certificate from which
+// co-tenancy is inferred.
+//
+// Two domains on one certificate usually means one owner: a CA was asked to
+// certify both together, and whoever held the private key controlled both. But
+// the same signal is produced by shared hosting, where a provider bundles
+// unrelated customers onto one certificate. A certificate naming a handful of
+// identities is an ownership statement; one naming ninety is a hosting
+// artefact, and following it would walk the audit onto a stranger's estate.
+//
+// Twenty-five is comfortably above what a real group structure needs — the
+// motivating case bundles twelve — and well below the bundling sizes that make
+// the inference meaningless.
+const DefaultMaxSANsForRelation = 25
+
+// CollectOptions bound the inferences Collect is willing to draw.
+type CollectOptions struct {
+	// MaxSANsForRelation overrides DefaultMaxSANsForRelation. Zero uses the
+	// default. Raising it finds more related domains at the cost of admitting
+	// shared-hosting neighbours; lowering it admits only tightly-grouped
+	// certificates.
+	MaxSANsForRelation int
+}
+
+// maxSANs resolves the effective ceiling.
+func (o CollectOptions) maxSANs() int {
+	if o.MaxSANsForRelation == 0 {
+		return DefaultMaxSANsForRelation
+	}
+	return o.MaxSANsForRelation
 }
 
 // crtSh queries the crt.sh certificate search service.
@@ -160,12 +198,27 @@ func normaliseName(n string) string {
 // target is not the target's. Assessing those would mean reporting on somebody
 // else's infrastructure.
 func Collect(domain string, certs []Certificate) Result {
+	return CollectWith(domain, certs, CollectOptions{})
+}
+
+// CollectWith is Collect with the inference bounds made explicit.
+func CollectWith(domain string, certs []Certificate, opts CollectOptions) Result {
 	domain = normaliseName(domain)
 
 	hosts := map[string]bool{}
 	wildcards := map[string]bool{}
+	related := map[string]bool{}
+
+	self := RegistrableDomain(domain)
+	ceiling := opts.maxSANs()
 
 	for _, cert := range certs {
+		// Co-tenancy is only read from certificates small enough for the
+		// inference to mean something. The in-domain names below are still
+		// taken from every certificate: a name under the target zone belongs
+		// to the target however many others it was bundled with.
+		relatable := len(cert.Names) <= ceiling
+
 		for _, name := range cert.Names {
 			// Normalised again here rather than trusted from the source, so
 			// that a second Source implementation cannot introduce duplicates
@@ -174,23 +227,53 @@ func Collect(domain string, certs []Certificate) Result {
 			if name == "" {
 				continue
 			}
+			bare := strings.TrimPrefix(name, "*.")
+
 			if strings.HasPrefix(name, "*.") {
-				if within(domain, strings.TrimPrefix(name, "*.")) {
+				if within(domain, bare) {
 					wildcards[name] = true
+					continue
 				}
+			} else if within(domain, name) {
+				hosts[name] = true
 				continue
 			}
-			if within(domain, name) {
-				hosts[name] = true
+
+			// Everything reaching here named something outside the zone.
+			if !relatable {
+				continue
+			}
+			if reg := RegistrableDomain(bare); reg != "" && reg != self {
+				related[reg] = true
 			}
 		}
 	}
 
 	return Result{
-		Certificates:  certs,
-		Hosts:         sortedKeys(hosts),
-		WildcardNames: sortedKeys(wildcards),
+		Certificates:   certs,
+		Hosts:          sortedKeys(hosts),
+		WildcardNames:  sortedKeys(wildcards),
+		RelatedDomains: sortedKeys(related),
 	}
+}
+
+// RegistrableDomain returns the domain one label below its public suffix, which
+// is the unit somebody can actually register and therefore own.
+//
+// Pivoting is done on this rather than the full name so that ten hosts under
+// one sibling domain produce one candidate to enumerate, not ten. An empty
+// string means the name is itself a public suffix, or has no registrable part,
+// in which case there is nothing to pivot to.
+func RegistrableDomain(name string) string {
+	name = normaliseName(name)
+	if name == "" {
+		return ""
+	}
+	reg, err := publicsuffix.EffectiveTLDPlusOne(name)
+	if err != nil {
+		return ""
+	}
+	return reg
 }
 
 // within reports whether name is the domain or below it.
