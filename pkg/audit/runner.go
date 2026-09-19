@@ -284,7 +284,7 @@ func (r *Runner) runTarget(ctx context.Context, index int, target string, totalT
 				state = finding.StateCheckFailed
 				out.checks = append(out.checks, finding.CheckResult{
 					Check: name, Target: target, State: finding.StateCheckFailed,
-					Records: outcome.Records,
+					Records: outcome.Records, Observation: outcome.Observation,
 				})
 				out.errs = append(out.errs, ClassifyError(name, target, err))
 			default:
@@ -294,6 +294,7 @@ func (r *Runner) runTarget(ctx context.Context, index int, target string, totalT
 				}
 				out.checks = append(out.checks, finding.CheckResult{
 					Check: name, Target: target, State: state, Records: outcome.Records,
+					Observation: outcome.Observation,
 				})
 				out.findings = append(out.findings, outcome.Findings...)
 			}

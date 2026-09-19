@@ -83,6 +83,11 @@ type Outcome struct {
 	Records []string
 	// Findings are the assessed issues.
 	Findings []finding.Finding
+	// Observation is the structured data the check gathered, when it gathers
+	// any. It travels to the result alongside the rendered records rather than
+	// instead of them: records are what a reader sees, this is what a consumer
+	// reads.
+	Observation *finding.Observation
 }
 
 // Check is the contract every assessment implements.

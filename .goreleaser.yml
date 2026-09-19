@@ -139,16 +139,44 @@ homebrew_casks:
       email: dayo.dev@gmail.com
     commit_msg_template: "vantage: update to {{ .Tag }}"
     # The binaries are not notarised — Apple charges yearly for that — so
-    # macOS quarantines them and reports the download as damaged. This is not
-    # hypothetical: checkmate-app's cask has no such hook, and its users had
-    # to run xattr by hand. Clearing the attribute on install is Homebrew's
-    # documented workaround for unsigned casks.
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/vantage"]
-          end
+    # macOS quarantines them and reports the download as damaged. Clearing the
+    # attribute on install is Homebrew's documented workaround for unsigned
+    # casks.
+    #
+    # This is written as a `custom_block` rather than the `hooks.post.install`
+    # that GoReleaser documents for exactly this purpose, because that hook
+    # renders a `postflight do … end` block and Homebrew has deprecated
+    # arbitrary-Ruby flight blocks:
+    #
+    #   Warning: Calling `postflight` is deprecated! Use `postflight_steps`
+    #   instead. Please report this issue to the adedayo/homebrew-tap tap
+    #
+    # That warning printed on every command that touched the tap, for every
+    # user, and deprecation here is not idle: in the same cycle Homebrew
+    # *disabled* `depends_on macos: :catalina`, which made a sibling cask
+    # uninstallable with no warning beyond the ones already being ignored.
+    # GoReleaser has no `postflight_steps` support, so the stanza is emitted
+    # directly. `custom_block` is placed at the top of the cask definition;
+    # stanza order is not significant to Homebrew.
+    #
+    # Two details make this safe to pass through GoReleaser's templating:
+    #
+    #   - No `{{ … }}` and no `#{ … }`. `chdir: "."` resolves against
+    #     `postflight_steps`' default base, which is the staged path, so the
+    #     binary is named relatively and no interpolation is needed. Writing
+    #     `{{staged_path}}` — the token Homebrew would otherwise want — would
+    #     be eaten by the Go template engine before Homebrew ever saw it.
+    #   - `must_succeed: false` preserves the tolerance the old `if OS.mac?`
+    #     guard provided. A binary carrying no such attribute, or a platform
+    #     with no /usr/bin/xattr, must not turn a successful install into a
+    #     failed one.
+    custom_block: |
+      postflight_steps do
+        run "/usr/bin/xattr",
+            args:         ["-dr", "com.apple.quarantine", "vantage"],
+            chdir:        ".",
+            must_succeed: false
+      end
     # `brew uninstall --zap` should leave nothing behind. The cache holds
     # provider ranges and Certificate Transparency results, not configuration,
     # so removing it costs the user only a re-fetch.

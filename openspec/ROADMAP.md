@@ -1,6 +1,6 @@
 # Roadmap
 
-Specs `002`–`008` are implemented. Specs `009`–`014` are proposed and are
+Specs `002`–`008` are implemented. Specs `009`–`015` are proposed and are
 sequenced below, because the dependencies between them are strict.
 
 ## Dependency graph
@@ -10,12 +10,13 @@ sequenced below, because the dependencies between them are strict.
                             │                          │
                             ├──> 011 deep analysis      └──> 014 agentic readiness
                             │
-                            └──> 012 attack surface
+                            └──> 012 attack surface ──> 015 structured observations
 ```
 
 `009` is foundational: it replaces string output with a findings model, so every
 later spec depends on it. `014` depends on `010` because the capability manifest
-and MCP tools are generated from the check registry.
+and MCP tools are generated from the check registry. `015` depends on `012`
+because it exposes the observations the attack-surface checks compute.
 
 ## Phases
 
@@ -444,6 +445,20 @@ stdout/stderr discipline, evidence and confidence on every finding — are
 **obligations on the earlier phases**, not deferred work. They are specified in
 `009` and must be honoured as the foundation is built, otherwise Phase 5 becomes
 a retrofit.
+
+### Phase 6 — Embedding (`015`)
+Structured observations on the result: network attribution with its provenance,
+and Certificate Transparency hostnames, exposed as typed values rather than as
+rendered prose.
+
+Additive and small, but it is the phase that makes the library genuinely
+embeddable. Everything needed already exists — `netattr.Attribution`,
+`SourceProvenance`, `analyse.NetworkHost`, `analyse.CTHost` — and is discarded
+at the boundary, so today a consumer's only route to it is parsing record
+lines. That parse fails silently and in the reassuring direction: reworded
+prose yields no match, which reads as "no attribution" rather than as an error.
+
+Driven by a real consumer. Trawl's vantage integration is blocked on it.
 
 ## Cross-cutting concerns
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/adedayo/vantage/pkg/analyse"
 	"github.com/adedayo/vantage/pkg/netattr"
+	"github.com/adedayo/vantage/pkg/observation"
 )
 
 // fetchNetworkAttribution resolves the domain's own infrastructure and any
@@ -21,7 +22,7 @@ import (
 // needs configuration to say anything is a check most people never enable.
 func fetchNetworkAttribution(
 	ctx context.Context, c *Cache, domain string, hosts, expect []string, noNetwork bool,
-) (analyse.NetworkObservation, error) {
+) (analyse.NetworkObservation, observation.Network, error) {
 	// With egress disabled the provider ranges cannot be fetched, but the
 	// special-purpose registries are embedded, so the rule that matters most —
 	// a public name resolving into internal address space — still runs. An
@@ -31,7 +32,7 @@ func fetchNetworkAttribution(
 	if !noNetwork {
 		loaded, err := c.Ranges().Load(ctx)
 		if err != nil {
-			return analyse.NetworkObservation{}, err
+			return analyse.NetworkObservation{}, observation.Network{}, err
 		}
 		set = loaded
 	}
@@ -70,7 +71,7 @@ func fetchNetworkAttribution(
 		}
 	}
 
-	return obs, nil
+	return obs, structuredNetwork(obs, set), nil
 }
 
 type estateHost struct{ name, role string }
@@ -149,4 +150,21 @@ func attributeHost(
 	}
 
 	return host
+}
+
+// structuredNetwork restates the gathered facts as the observation a consumer
+// reads, carrying the provenance the rendered records flatten to prose.
+//
+// The two are built from the same values rather than one from the other, so
+// rewording a record cannot change what a consumer receives.
+func structuredNetwork(obs analyse.NetworkObservation, set netattr.Set) observation.Network {
+	return observation.Network{
+		Domain:                obs.Domain,
+		Hosts:                 obs.Hosts,
+		Estate:                obs.Estate,
+		ExpectedJurisdictions: obs.ExpectedJurisdictions,
+		FailedSources:         set.Failed,
+		StaleSources:          set.Stale,
+		Provenance:            set.Provenance,
+	}
 }

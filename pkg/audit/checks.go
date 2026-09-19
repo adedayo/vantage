@@ -628,7 +628,7 @@ func networkCheck() Check {
 			TypicalQueries: 16,
 		},
 		Fn: func(ctx context.Context, t Target) (Outcome, error) {
-			obs, err := fetchNetworkAttribution(ctx, t.Cache, t.Domain,
+			obs, structured, err := fetchNetworkAttribution(ctx, t.Cache, t.Domain,
 				hostsWithin(t.Domain, t.Hosts), t.ExpectJurisdictions, t.NoNetwork)
 			if err != nil {
 				return Outcome{}, err
@@ -641,6 +641,10 @@ func networkCheck() Check {
 				State:    finding.StateOK,
 				Records:  analyse.NetworkRecords(obs),
 				Findings: analyse.NetworkAttribution(analyse.Origin{Target: t.Domain}, obs),
+				// The structured observation carries the provenance the records
+				// flatten to prose, so a consumer can tell a host that moved from
+				// data that was refreshed.
+				Observation: &finding.Observation{Network: &structured},
 			}, nil
 		},
 	}
@@ -678,10 +682,17 @@ func certificateTransparencyCheck() Check {
 				return notFound()
 			}
 
+			// analyse.CTObservation is an alias of observation.CT, so this is
+			// the same value under another name; the copy exists only so the
+			// result can hold a pointer without aliasing the local.
+			structured := obs
 			return Outcome{
 				State:    finding.StateOK,
 				Records:  analyse.CTRecords(obs),
 				Findings: analyse.CertificateTransparency(analyse.Origin{Target: t.Domain}, obs),
+				// Discovered names travel structurally so a consumer feeding
+				// discovery keeps the three-state resolution intact.
+				Observation: &finding.Observation{CT: &structured},
 			}, nil
 		},
 	}

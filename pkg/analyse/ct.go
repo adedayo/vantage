@@ -6,44 +6,20 @@ import (
 	"strings"
 
 	"github.com/adedayo/vantage/pkg/finding"
+	"github.com/adedayo/vantage/pkg/observation"
 )
 
-// CTHost is one name discovered in a certificate, together with what resolution
-// revealed about it.
-type CTHost struct {
-	// Host is the name.
-	Host string
-	// Resolves reports whether the name has an address, an alias or a
-	// delegation.
-	Resolves bool
-	// NXDOMAIN reports that the resolver answered definitively that the name
-	// does not exist. It is not the negation of Resolves: a query that failed
-	// leaves both false, and nothing may be concluded from that.
-	NXDOMAIN bool
-	// Issuer is the certificate authority that certified the name.
-	Issuer string
-	// Expiry is when the most recent certificate for the name expires,
-	// formatted for evidence.
-	Expiry string
-}
-
-// CTObservation is everything Certificate Transparency enumeration found.
-type CTObservation struct {
-	// Domain is the zone assessed.
-	Domain string
-	// Source names the log service the data came from.
-	Source string
-	// Hosts are the discovered names and their resolution state.
-	Hosts []CTHost
-	// WildcardNames are wildcard identities covering the domain.
-	WildcardNames []string
-	// CertificateCount is how many issuances were examined.
-	CertificateCount int
-	// Discovered is how many distinct in-domain names the logs held, before
-	// any bound on how many were resolved. It differs from len(Hosts) only
-	// when the bound applied.
-	Discovered int
-}
+// CTHost and CTObservation are the structured facts Certificate Transparency
+// enumeration gathered. They live in pkg/observation so that consumers can read
+// them without importing the judgement rules, and are aliased here so that this
+// package — and every existing caller — continues to name them as before.
+//
+// Aliases rather than distinct types: a copy would drift, and two types meaning
+// the same thing is how a consumer ends up converting between them by hand.
+type (
+	CTHost        = observation.CTHost
+	CTObservation = observation.CT
+)
 
 // internalKeywords are the labels that suggest a name was meant for internal
 // use.

@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/adedayo/vantage/pkg/observation"
 )
 
 // SchemaVersion identifies the shape of the result envelope. It follows semver:
@@ -12,7 +14,7 @@ import (
 //
 // Once released this is a public contract — agents and SIEM pipelines key on it
 // — so it deserves the same care as the library API.
-const SchemaVersion = "1.0"
+const SchemaVersion = "1.1"
 
 // State distinguishes the three outcomes that a naive report would conflate.
 //
@@ -72,6 +74,30 @@ type CheckResult struct {
 	Target  string   `json:"target"`
 	State   State    `json:"state"`
 	Records []string `json:"records,omitempty"`
+	// Observation is the structured data the check gathered, when it gathers
+	// any. Records render the same facts for a reader; this is the contract a
+	// consumer reads.
+	//
+	// A pointer so that "no observation" and "an empty observation" stay
+	// distinguishable — in the Go value and, because it is omitted when nil,
+	// in the JSON too. A consumer must be able to tell a check that gathered
+	// nothing from one that does not gather this kind of fact at all.
+	Observation *Observation `json:"observation,omitempty"`
+}
+
+// Observation carries the structured facts a check gathered.
+//
+// One field per kind of observation, each a pointer and each omitted when
+// absent. A new kind is added by adding a field: existing consumers are
+// unaffected, and none has to interpret an untyped payload to discover what it
+// received.
+type Observation struct {
+	// Network is address attribution: provider, region, jurisdiction, and the
+	// provenance of the data that produced them.
+	Network *observation.Network `json:"network,omitempty"`
+	// CT is what Certificate Transparency disclosed, including names that no
+	// longer resolve.
+	CT *observation.CT `json:"ct,omitempty"`
 }
 
 // Record prefixes marking a line as describing the run rather than the domain.

@@ -6,20 +6,17 @@ import (
 
 	"github.com/adedayo/vantage/pkg/finding"
 	"github.com/adedayo/vantage/pkg/netattr"
+	"github.com/adedayo/vantage/pkg/observation"
 )
 
-// NetworkHost is one resolved name and what the address it resolves to could
-// be attributed to.
-type NetworkHost struct {
-	// Host is the name.
-	Host string
-	// Role describes why the name was assessed — "apex", "host", "mail
-	// exchanger" or "nameserver" — so a reader can tell an exposure on a web
-	// host from one on mail infrastructure.
-	Role string
-	// Attributions is one entry per address the name resolves to.
-	Attributions []netattr.Attribution
-}
+// NetworkHost is the structured fact of one resolved name and its
+// attributions. It lives in pkg/observation so consumers can read it without
+// importing the judgement rules, and is aliased here so this package and every
+// existing caller continue to name it as before.
+//
+// An alias rather than a copy: two types meaning the same thing is how a
+// consumer ends up converting between them by hand.
+type NetworkHost = observation.NetworkHost
 
 // NetworkObservation is everything retrieval gathered for the attribution
 // rules.
