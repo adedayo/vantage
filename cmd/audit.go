@@ -37,6 +37,7 @@ var (
 	auditPivotBudget         int
 	auditPivotMaxSANs        int
 	auditExpectJurisdictions []string
+	auditDKIMSelectors       []string
 )
 
 var auditCmd = &cobra.Command{
@@ -116,6 +117,7 @@ assess the domains you target.`,
 			PivotBudget:         auditPivotBudget,
 			PivotMaxSANs:        auditPivotMaxSANs,
 			ExpectJurisdictions: auditExpectJurisdictions,
+			DKIMSelectors:       auditDKIMSelectors,
 			Concurrency:         auditConcurrency,
 			CheckConcurrency:    auditCheckConcurrency,
 		}
@@ -357,6 +359,10 @@ func init() {
 	f.StringSliceVar(&auditExpectJurisdictions, "expect-jurisdiction", nil,
 		"ISO 3166-1 alpha-2 country codes infrastructure is expected to be hosted in, e.g. GB,IE. "+
 			"Without this, the jurisdiction rule is not evaluated.")
+	f.StringSliceVar(&auditDKIMSelectors, "dkim-selector", nil,
+		"DKIM selectors the domain signs with. Without this, a list of common selectors is "+
+			"probed, and finding none proves nothing: selectors cannot be enumerated from DNS, "+
+			"so the check reports that it could not tell rather than that DKIM is absent.")
 
 	rootCmd.AddCommand(auditCmd)
 }

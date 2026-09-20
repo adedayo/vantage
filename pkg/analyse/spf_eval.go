@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/adedayo/vantage/pkg/finding"
+	"github.com/adedayo/vantage/pkg/observation"
 )
 
 // SPFResolver supplies the lookups that recursive SPF evaluation needs.
@@ -208,9 +209,37 @@ func normaliseDomain(d string) string {
 // It is a superset of SPF: the record-only rules are applied first, so callers
 // with a resolver to hand should use this and callers without should use SPF.
 func SPFRecursive(ctx context.Context, o Origin, r SPFResolver, records []string, hasMail bool) []finding.Finding {
+	findings, _ := SPFObserved(ctx, o, r, records, hasMail)
+	return findings
+}
+
+// SPFObserved is SPFRecursive, additionally returning the facts it established
+// as structured data.
+//
+// It exists because a consumer computing its own severity needs the
+// terminating mechanism and the lookup count, and the alternative — parsing
+// them back out of rendered findings — would mean a second parser that can
+// disagree with this one about what a record says. The evaluation is shared
+// rather than repeated, so the observation costs no additional queries.
+func SPFObserved(ctx context.Context, o Origin, r SPFResolver, records []string, hasMail bool) ([]finding.Finding, observation.SPF) {
 	findings := SPF(o, records, hasMail)
+
+	obs := observation.SPF{
+		Presence:  observation.PresenceAbsent,
+		SendsMail: hasMail,
+	}
+	if len(records) > 0 {
+		obs.Presence = observation.PresencePublished
+		obs.Record = records[0]
+		obs.AllMechanism = strings.TrimSuffix(terminal(records[0]), "all")
+		// A record that parsed well enough to yield terms is syntactically
+		// usable; the specific defects are reported as findings rather than
+		// by withholding this flag.
+		obs.Valid = strings.HasPrefix(strings.ToLower(strings.TrimSpace(records[0])), "v=spf1")
+	}
+
 	if len(records) == 0 || r == nil {
-		return findings
+		return findings, obs
 	}
 
 	record := records[0]
@@ -222,6 +251,9 @@ func SPFRecursive(ctx context.Context, o Origin, r SPFResolver, records []string
 	}
 
 	eval := EvaluateSPF(ctx, r, o.Target, record)
+
+	obs.Lookups = eval.Lookups
+	obs.LookupLimitExceeded = eval.Lookups > spfLookupLimit
 
 	count := strconv.Itoa(eval.Lookups)
 	if eval.Bounded {
@@ -254,7 +286,7 @@ func SPFRecursive(ctx context.Context, o Origin, r SPFResolver, records []string
 				"`, so the include graph contains a cycle."))
 	}
 
-	return findings
+	return findings, obs
 }
 
 // lengthProblems reports records that breach the TXT string or total size

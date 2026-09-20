@@ -68,6 +68,15 @@ type Target struct {
 	// was stated, and the jurisdiction rule is then not evaluated: this tool
 	// has no basis for guessing where an organisation intends to be hosted.
 	ExpectJurisdictions []string
+	// DKIMSelectors are the selectors the operator knows their domain signs
+	// with. Empty means the check probes a list of common ones instead.
+	//
+	// The distinction is not a performance detail. Selectors are not
+	// enumerable from DNS, so probing that finds nothing establishes nothing;
+	// named selectors that find nothing establish that the domain does not
+	// sign with them. Supplying this turns an inconclusive check into a
+	// conclusive one.
+	DKIMSelectors []string
 	// NoNetwork disables checks requiring egress beyond DNS.
 	NoNetwork bool
 }

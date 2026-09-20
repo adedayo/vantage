@@ -80,6 +80,9 @@ type Runner struct {
 	// ExpectJurisdictions are the ISO 3166-1 alpha-2 countries the operator
 	// declares their infrastructure should be in.
 	ExpectJurisdictions []string
+	// DKIMSelectors are the selectors the operator knows their domain signs
+	// with. Empty means the common list is probed instead.
+	DKIMSelectors []string
 	// Observer, when non-nil, receives structured progress events as the run
 	// advances. It is invoked from multiple goroutines, so implementations
 	// must be safe for concurrent use, and it is called while a target's
@@ -222,6 +225,7 @@ func (r *Runner) runTarget(ctx context.Context, index int, target string, totalT
 		Cache:               NewCacheWithHTTP(r.Resolver, r.HTTP).WithRangeStore(r.RangeStore),
 		Hosts:               hostsWithin(target, r.Hosts),
 		ExpectJurisdictions: r.ExpectJurisdictions,
+		DKIMSelectors:       r.DKIMSelectors,
 		NoNetwork:           r.NoNetwork,
 	}
 

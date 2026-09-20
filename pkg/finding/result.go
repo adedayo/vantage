@@ -14,7 +14,7 @@ import (
 //
 // Once released this is a public contract — agents and SIEM pipelines key on it
 // — so it deserves the same care as the library API.
-const SchemaVersion = "1.1"
+const SchemaVersion = "1.2"
 
 // State distinguishes the three outcomes that a naive report would conflate.
 //
@@ -98,6 +98,10 @@ type Observation struct {
 	// CT is what Certificate Transparency disclosed, including names that no
 	// longer resolve.
 	CT *observation.CT `json:"ct,omitempty"`
+	// Email is email-authentication posture: the SPF, DKIM and DMARC facts a
+	// consumer needs in order to reach its own severity judgement, and the
+	// surrounding records.
+	Email *observation.Email `json:"email,omitempty"`
 }
 
 // Record prefixes marking a line as describing the run rather than the domain.

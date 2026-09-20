@@ -11,6 +11,7 @@ import (
 	vantage "github.com/adedayo/vantage/pkg"
 	"github.com/adedayo/vantage/pkg/analyse"
 	"github.com/adedayo/vantage/pkg/finding"
+	"github.com/adedayo/vantage/pkg/observation"
 	"github.com/adedayo/vantage/pkg/scanner"
 )
 
@@ -76,12 +77,18 @@ func spfCheck() Check {
 			}
 
 			origin := analyse.Origin{Target: t.Domain, Source: server}
-			findings := analyse.SPFRecursive(ctx, origin,
+			findings, structured := analyse.SPFObserved(ctx, origin,
 				cacheResolver{t.Cache}, records, sendsMail(ctx, t))
+			structured.Presence = presenceOf(len(records) > 0)
+			obs := &finding.Observation{Email: &observation.Email{
+				Domain: t.Domain, SPF: &structured,
+			}}
 			if len(records) == 0 {
-				return notFound(findings...)
+				return Outcome{State: finding.StateNotFound, Findings: findings,
+					Observation: obs}, nil
 			}
-			return Outcome{State: finding.StateOK, Records: records, Findings: findings}, nil
+			return Outcome{State: finding.StateOK, Records: records, Findings: findings,
+				Observation: obs}, nil
 		},
 	}
 }
@@ -113,10 +120,21 @@ func dmarcCheck() Check {
 			origin := analyse.Origin{Target: t.Domain, Source: server}
 			findings := analyse.DMARCFull(ctx, origin, cacheDMARCResolver{t.Cache},
 				records, organisationalDomain(t.Domain))
-			if len(records) == 0 {
-				return notFound(findings...)
+
+			structured := analyse.AbsentDMARC()
+			if len(records) > 0 {
+				structured = analyse.ParseDMARC(records[0]).Observation(len(records))
 			}
-			return Outcome{State: finding.StateOK, Records: records, Findings: findings}, nil
+			obs := &finding.Observation{Email: &observation.Email{
+				Domain: t.Domain, DMARC: &structured,
+			}}
+
+			if len(records) == 0 {
+				return Outcome{State: finding.StateNotFound, Findings: findings,
+					Observation: obs}, nil
+			}
+			return Outcome{State: finding.StateOK, Records: records, Findings: findings,
+				Observation: obs}, nil
 		},
 	}
 }
@@ -127,6 +145,9 @@ func dmarcCheck() Check {
 // guess. The check therefore reports what it finds but never concludes DKIM is
 // absent, because "we looked in the obvious places" is not the same as "it is
 // not there" — and reporting the latter would be a plain falsehood.
+//
+// An operator who knows their own selectors can supply them through
+// Request.DKIMSelectors, and the answer stops being an inference at that point.
 var commonDKIMSelectors = []string{
 	"default", "google", "selector1", "selector2", "k1", "s1", "s2",
 	"mail", "dkim", "mandrill", "zoho", "everlytickey1", "sig1",
@@ -148,7 +169,19 @@ func dkimCheck() Check {
 				keys    []analyse.DKIMKey
 				server  string
 			)
-			for _, selector := range commonDKIMSelectors {
+
+			// Selectors the operator named are facts about their deployment;
+			// the common list is a guess. Which of the two was used decides
+			// what an absence is allowed to mean, so it is tracked rather than
+			// assumed.
+			selectors := commonDKIMSelectors
+			probed := true
+			if len(t.DKIMSelectors) > 0 {
+				selectors = t.DKIMSelectors
+				probed = false
+			}
+
+			for _, selector := range selectors {
 				name := selector + "._domainkey." + t.Domain
 				txts, from, err := t.Cache.LookupTXT(ctx, name)
 				if err != nil {
@@ -167,15 +200,29 @@ func dkimCheck() Check {
 			}
 
 			origin := analyse.Origin{Target: t.Domain, Source: server}
-			findings := analyse.DKIM(origin, keys, true)
+			findings := analyse.DKIM(origin, keys, probed)
+			structured := analyse.DKIMObservation(selectors, keys, probed)
+			obs := &finding.Observation{Email: &observation.Email{
+				Domain: t.Domain, DKIM: &structured,
+			}}
+
 			if len(records) == 0 {
+				if !probed {
+					// The operator named these selectors, so their absence is
+					// an observation about the domain rather than about the
+					// limits of guessing, and may be stated as one.
+					return Outcome{State: finding.StateNotFound, Findings: findings,
+						Observation: obs}, nil
+				}
 				// Not "absent": DKIM selectors cannot be enumerated from DNS,
 				// so a miss across the common ones proves nothing. Reporting
 				// this as not-found would invite the reader to conclude a
 				// control is missing when it may simply use a private selector.
-				return Outcome{State: finding.StateNotChecked, Findings: findings}, nil
+				return Outcome{State: finding.StateNotChecked, Findings: findings,
+					Observation: obs}, nil
 			}
-			return Outcome{State: finding.StateOK, Records: records, Findings: findings}, nil
+			return Outcome{State: finding.StateOK, Records: records, Findings: findings,
+				Observation: obs}, nil
 		},
 	}
 }
@@ -288,9 +335,11 @@ func caaCheck() Check {
 		Fn: func(ctx context.Context, t Target) (Outcome, error) {
 			policy := climbCAA(ctx, t.Cache, t.Domain)
 			findings := analyse.CAA(analyse.Origin{Target: t.Domain}, policy)
+			obs := adjacentObservation(t.Domain, "caa", len(policy.Records) > 0, "")
 
 			if len(policy.Records) == 0 {
-				return notFound(findings...)
+				return Outcome{State: finding.StateNotFound, Findings: findings,
+					Observation: obs}, nil
 			}
 
 			records := make([]string, 0, len(policy.Records))
@@ -298,7 +347,8 @@ func caaCheck() Check {
 				records = append(records,
 					fmt.Sprintf("%d %s %q", r.Flags, r.Tag, r.Value))
 			}
-			return Outcome{State: finding.StateOK, Records: records, Findings: findings}, nil
+			return Outcome{State: finding.StateOK, Records: records, Findings: findings,
+				Observation: obs}, nil
 		},
 	}
 }
@@ -343,8 +393,16 @@ func mtastsCheck() Check {
 			}
 
 			findings := analyse.MTASTS(origin, records, policy, mxHosts(ctx, t.Cache, t.Domain))
+
+			// The enforcement mode is the detail that matters: a policy in
+			// testing mode is published, discoverable and enforcing nothing,
+			// so reporting only its presence would credit the domain with a
+			// control it is not yet operating.
+			obs := adjacentObservation(t.Domain, "mtasts", len(records) > 0, policy.Mode)
+
 			if len(records) == 0 {
-				return notFound(findings...)
+				return Outcome{State: finding.StateNotFound, Findings: findings,
+					Observation: obs}, nil
 			}
 
 			if policy.Raw != "" {
@@ -356,7 +414,8 @@ func mtastsCheck() Check {
 					}
 				}
 			}
-			return Outcome{State: finding.StateOK, Records: records, Findings: findings}, nil
+			return Outcome{State: finding.StateOK, Records: records, Findings: findings,
+				Observation: obs}, nil
 		},
 	}
 }
@@ -410,10 +469,13 @@ func tlsrptCheck() Check {
 
 			origin := analyse.Origin{Target: t.Domain, Source: server}
 			findings := analyse.TLSRPT(origin, records)
+			obs := adjacentObservation(t.Domain, "tlsrpt", len(records) > 0, "")
 			if len(records) == 0 {
-				return notFound(findings...)
+				return Outcome{State: finding.StateNotFound, Findings: findings,
+					Observation: obs}, nil
 			}
-			return Outcome{State: finding.StateOK, Records: records, Findings: findings}, nil
+			return Outcome{State: finding.StateOK, Records: records, Findings: findings,
+				Observation: obs}, nil
 		},
 	}
 }
@@ -444,13 +506,17 @@ func bimiCheck() Check {
 
 			if len(records) == 0 {
 				// Absence is not a finding: BIMI is optional branding, so the
-				// analysis is only run when a record exists.
-				return notFound()
+				// analysis is only run when a record exists. The observation is
+				// still recorded, because "we looked and there was none" is an
+				// answer a consumer building a posture view needs.
+				return Outcome{State: finding.StateNotFound,
+					Observation: adjacentObservation(t.Domain, "bimi", false, "")}, nil
 			}
 
 			origin := analyse.Origin{Target: t.Domain, Source: server}
 			findings := analyse.BIMI(origin, records, dmarcEnforcing(ctx, t.Cache, t.Domain))
-			return Outcome{State: finding.StateOK, Records: records, Findings: findings}, nil
+			return Outcome{State: finding.StateOK, Records: records, Findings: findings,
+				Observation: adjacentObservation(t.Domain, "bimi", true, "")}, nil
 		},
 	}
 }

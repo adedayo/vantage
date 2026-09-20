@@ -81,6 +81,14 @@ type Request struct {
 	// declares their infrastructure should be in. Empty means no expectation
 	// was stated, and the jurisdiction rule is then not evaluated.
 	ExpectJurisdictions []string
+	// DKIMSelectors are the selectors the operator knows their domain signs
+	// with. Empty means the dkim check probes a list of common ones.
+	//
+	// Supplying them changes what the check can conclude. Probing that finds
+	// nothing proves nothing, because a domain may sign with a selector nobody
+	// can guess; named selectors that find nothing establish an absence. The
+	// check reports the difference rather than hiding it.
+	DKIMSelectors []string
 	// Concurrency and CheckConcurrency bound parallelism. Zero means default.
 	Concurrency, CheckConcurrency int
 	// Observer, when non-nil, receives progress. It is called from multiple
@@ -220,6 +228,7 @@ func (r *Runner) Assess(ctx context.Context, req Request) (*finding.Result, erro
 		PivotBudget:         req.PivotBudget,
 		PivotMaxSANs:        req.PivotMaxSANs,
 		ExpectJurisdictions: req.ExpectJurisdictions,
+		DKIMSelectors:       req.DKIMSelectors,
 		Observer:            req.Observer,
 		Version:             r.Version,
 	}

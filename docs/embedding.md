@@ -322,6 +322,43 @@ that raised no findings. Do not look for a positive signal that does not exist â
 and do not infer compliance from silence you have not confirmed was *assessed*,
 which is why `not_checked` and `check_failed` must stay distinct in your store.
 
+### Structured observations
+
+`CheckResult.Observation` carries the facts a check gathered, as data. Records
+render the same facts for a human; this is the contract for a consumer.
+
+```go
+type Observation struct {
+	Network *observation.Network // provider, region, jurisdiction, provenance
+	CT      *observation.CT      // names Certificate Transparency disclosed
+	Email   *observation.Email   // SPF, DKIM, DMARC and the adjacent records
+}
+```
+
+Read these rather than parsing rendered prose. Prose that is later reworded
+yields no match, and a consumer built on it then reports "nothing observed"
+instead of "I could not read this" â€” silence in the reassuring direction, which
+is the failure mode worth designing out.
+
+`observation.Email` exists so that a consumer computing its own severity has
+the tags to compute it from: `DMARC.Policy`, `.Percent`, `.SubdomainPolicy`,
+`.AlignmentSPF`, `.AlignmentDKIM`; `SPF.AllMechanism` and `.Lookups`. Two
+helpers make the judgements that are easy to get wrong:
+
+- `DMARC.Enforcing()` is false for `p=reject; pct=40`. A policy applied to part
+  of the mail is partial enforcement, and reporting it as enforcement tells a
+  reader a spoofing route is closed when it is open three times in five.
+- `DKIM.Conclusive()` is false when selectors were probed and none answered.
+  Selectors cannot be enumerated from DNS, so a miss across the common list
+  establishes nothing. Supply `Request.DKIMSelectors` and the absence becomes
+  an answer.
+
+`Presence` is three-valued for the same reason `State` is four-valued: a
+control that is absent is a decision somebody made, and one we could not look
+for is a gap in the evidence. Vantage emits `published` and `absent`; supply
+`undetermined` yourself for a check that failed, since only you know which
+checks you asked for.
+
 ## Cancellation
 
 Both methods take a `context.Context` and honour cancellation. A cancelled run
