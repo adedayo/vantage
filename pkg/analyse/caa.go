@@ -100,7 +100,8 @@ func CAA(o Origin, policy CAAPolicy) []finding.Finding {
 		if r.Critical() && !knownCAATags[r.Tag] {
 			findings = append(findings, finding.New("SURF-CAA-004", target, ev,
 				finding.ComputedEvidence("caa.tag", r.Tag),
-				finding.ComputedEvidence("caa.flags", "critical")))
+				finding.ComputedEvidence("caa.flags", "critical")).
+				WithDescription("Specifically, the unrecognised tag is `"+r.Tag+"`."))
 		}
 	}
 

@@ -247,7 +247,8 @@ func SPFObserved(ctx context.Context, o Origin, r SPFResolver, records []string,
 
 	if lengths := lengthProblems(records); len(lengths) > 0 {
 		findings = append(findings, finding.New("SURF-SPF-010", o.Target, ev,
-			finding.ComputedEvidence("spf.length", strings.Join(lengths, "; "))))
+			finding.ComputedEvidence("spf.length", strings.Join(lengths, "; "))).
+			WithDescription("Specifically, "+strings.Join(lengths, "; ")+"."))
 	}
 
 	eval := EvaluateSPF(ctx, r, o.Target, record)
@@ -269,12 +270,20 @@ func SPFObserved(ctx context.Context, o Origin, r SPFResolver, records []string,
 	if eval.VoidLookups > spfVoidLimit {
 		findings = append(findings, finding.New("SURF-SPF-007", o.Target, ev,
 			finding.ComputedEvidence("spf.void_lookups", strconv.Itoa(eval.VoidLookups)),
-			finding.ComputedEvidence("spf.void_names", strings.Join(eval.VoidNames, ", "))))
+			finding.ComputedEvidence("spf.void_names", strings.Join(eval.VoidNames, ", "))).
+			WithDescription("Specifically, the names that returned nothing are "+
+				namesList(eval.VoidNames)+"."))
 	}
 
 	for _, term := range eval.BrokenTerms {
+		// The generic description cannot say which term is at fault, and the
+		// record in the evidence is long enough that the reader would have to
+		// hunt for it. Naming the term in the finding's own description means
+		// the offending mechanism is the first thing read.
 		findings = append(findings, finding.New("SURF-SPF-009", o.Target, ev,
-			finding.ComputedEvidence("spf.term", term)))
+			finding.ComputedEvidence("spf.term", term)).
+			WithDescription("Specifically, the term `"+term+"` names `"+
+				brokenTargetName(term)+"`, which does not resolve or publishes no SPF record."))
 	}
 
 	if eval.Loop {
@@ -287,6 +296,18 @@ func SPFObserved(ctx context.Context, o Origin, r SPFResolver, records []string,
 	}
 
 	return findings, obs
+}
+
+// brokenTargetName strips the mechanism prefix from an include or redirect
+// term so the description can name the domain rather than the whole term.
+func brokenTargetName(term string) string {
+	if _, target, found := strings.Cut(term, "="); found {
+		return target
+	}
+	if _, target, found := strings.Cut(term, ":"); found {
+		return target
+	}
+	return term
 }
 
 // lengthProblems reports records that breach the TXT string or total size

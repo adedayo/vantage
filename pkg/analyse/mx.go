@@ -64,13 +64,15 @@ func MX(o Origin, hosts []MXHost, hasAddress bool) []finding.Finding {
 			strconv.Itoa(h.Preference)+" "+h.Host)
 
 		if !h.Resolves {
-			findings = append(findings, finding.New("SURF-MX-001", target, ev))
+			findings = append(findings, finding.New("SURF-MX-001", target, ev).
+				WithDescription("Specifically, the exchanger is `"+h.Host+"`."))
 			// A host that does not resolve cannot also be diagnosed as a
 			// CNAME; reporting both would be two findings for one defect.
 			continue
 		}
 		if h.IsCNAME {
-			findings = append(findings, finding.New("SURF-MX-002", target, ev))
+			findings = append(findings, finding.New("SURF-MX-002", target, ev).
+				WithDescription("Specifically, the exchanger is `"+h.Host+"`."))
 		}
 	}
 

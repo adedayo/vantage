@@ -146,29 +146,38 @@ func DKIM(o Origin, keys []DKIMKey, probed bool) []finding.Finding {
 	for _, k := range keys {
 		name := k.Selector + "._domainkey." + strings.TrimSuffix(target, ".")
 		ev := o.txtEvidence(name, k.Raw)
+		// A domain commonly publishes several selectors, and the finding is
+		// about one of them. Without the selector named in the prose the
+		// reader has to recover it from the evidence key, which is the whole
+		// record — so the shortest fact is found last.
+		selector := "Specifically, this is the `" + k.Selector + "` selector"
 
 		switch {
 		case !k.Valid:
 			findings = append(findings, finding.New("SURF-DKIM-006", target, ev).
-				WithDescription("Specifically, "+k.Reason+"."))
+				WithDescription(selector+", where "+k.Reason+"."))
 			continue
 		case k.Revoked:
-			findings = append(findings, finding.New("SURF-DKIM-004", target, ev))
+			findings = append(findings, finding.New("SURF-DKIM-004", target, ev).
+				WithDescription(selector+"."))
 			continue
 		}
 
 		switch {
 		case k.Bits > 0 && k.Bits < 1024:
 			findings = append(findings, finding.New("SURF-DKIM-002", target, ev,
-				finding.ComputedEvidence("dkim.key_bits", strconv.Itoa(k.Bits))))
+				finding.ComputedEvidence("dkim.key_bits", strconv.Itoa(k.Bits))).
+				WithDescription(selector+", carrying a "+strconv.Itoa(k.Bits)+"-bit key."))
 		case k.Bits == 1024:
 			findings = append(findings, finding.New("SURF-DKIM-003", target, ev,
-				finding.ComputedEvidence("dkim.key_bits", "1024")))
+				finding.ComputedEvidence("dkim.key_bits", "1024")).
+				WithDescription(selector+"."))
 		}
 
 		if k.TestMode {
 			findings = append(findings, finding.New("SURF-DKIM-005", target, ev,
-				finding.ComputedEvidence("dkim.flags", "t=y")))
+				finding.ComputedEvidence("dkim.flags", "t=y")).
+				WithDescription(selector+"."))
 		}
 	}
 

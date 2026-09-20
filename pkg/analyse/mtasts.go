@@ -209,7 +209,9 @@ func MTASTS(o Origin, records []string, policy MTASTSPolicy, mxHosts []string) [
 	if len(uncovered) > 0 {
 		findings = append(findings, finding.New("SURF-MTASTS-005", target, ev,
 			finding.ComputedEvidence("mtasts.uncovered_mx", strings.Join(uncovered, ", ")),
-			finding.ComputedEvidence("mtasts.policy_mx", strings.Join(policy.MX, ", "))))
+			finding.ComputedEvidence("mtasts.policy_mx", strings.Join(policy.MX, ", "))).
+			WithDescription("Specifically, the uncovered exchangers are "+
+				namesList(uncovered)+"."))
 	}
 
 	if policy.ID != "" && record.ID != "" && policy.ID != record.ID {

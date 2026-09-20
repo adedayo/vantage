@@ -14,6 +14,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -292,7 +293,8 @@ func algorithmFindings(target, source string, z DNSSECZone, ad finding.Evidence)
 	return []finding.Finding{
 		finding.New("SURF-DNSSEC-004", target, ad,
 			finding.ComputedEvidence("dnssec.weak_algorithms", strings.Join(reasons, "; ")),
-			finding.DNSEvidence(target, "DNSKEY", keySummary(z.Keys), source)),
+			finding.DNSEvidence(target, "DNSKEY", keySummary(z.Keys), source)).
+			WithDescription("Specifically, " + strings.Join(reasons, "; ") + "."),
 	}
 }
 
@@ -327,13 +329,19 @@ func signatureFindings(target, source string, z DNSSECZone, ad finding.Evidence)
 		findings = append(findings, finding.New("SURF-DNSSEC-006", target, ad,
 			finding.DNSEvidence(target, "RRSIG", signatureSummary(*expired), source),
 			finding.ComputedEvidence("dnssec.expired_for",
-				now.Sub(expired.Expiration).Round(time.Minute).String())))
+				now.Sub(expired.Expiration).Round(time.Minute).String())).
+			WithDescription("Specifically, the earliest expired signature covers the `"+
+				expired.TypeCovered+"` record set, signed by key tag "+
+				strconv.Itoa(int(expired.KeyTag))+"."))
 	}
 	if expiring != nil {
 		findings = append(findings, finding.New("SURF-DNSSEC-005", target, ad,
 			finding.DNSEvidence(target, "RRSIG", signatureSummary(*expiring), source),
 			finding.ComputedEvidence("dnssec.expires_in",
-				expiring.Expiration.Sub(now).Round(time.Minute).String())))
+				expiring.Expiration.Sub(now).Round(time.Minute).String())).
+			WithDescription("Specifically, the earliest expiring signature covers the `"+
+				expiring.TypeCovered+"` record set, signed by key tag "+
+				strconv.Itoa(int(expiring.KeyTag))+"."))
 	}
 	return findings
 }

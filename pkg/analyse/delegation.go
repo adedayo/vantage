@@ -225,7 +225,8 @@ func lameDelegation(o Origin, d Delegation) []finding.Finding {
 
 		f := finding.New("SURF-NS-005", o.Target,
 			finding.ComputedEvidence("ns.host", ns.Host),
-			finding.ComputedEvidence("ns.answered", strconv.FormatBool(ns.Answered)))
+			finding.ComputedEvidence("ns.answered", strconv.FormatBool(ns.Answered))).
+			WithDescription("Specifically, the nameserver is `" + ns.Host + "`.")
 
 		if !ns.Answered {
 			// A server that said nothing may be lame, or may be behind a
@@ -234,7 +235,7 @@ func lameDelegation(o Origin, d Delegation) []finding.Finding {
 			// users too — but the confidence must not claim more than one
 			// observation can support.
 			f = f.WithConfidence(finding.ConfidenceMedium).
-				WithDescription("The nameserver did not respond to a direct query from this " +
+				WithDescription("It did not respond to a direct query from this " +
 					"vantage point, so it may be lame or may simply be unreachable from here.")
 		}
 		findings = append(findings, f)
@@ -257,7 +258,9 @@ func missingGlue(o Origin, d Delegation) []finding.Finding {
 			continue
 		}
 		findings = append(findings, finding.New("SURF-NS-006", o.Target,
-			finding.ComputedEvidence("ns.host", ns.Host)))
+			finding.ComputedEvidence("ns.host", ns.Host)).
+			WithDescription("Specifically, the nameserver is `"+ns.Host+"`, which lies "+
+				"within the zone it serves and so cannot be resolved without glue."))
 	}
 	return findings
 }
@@ -270,7 +273,8 @@ func openRecursion(o Origin, d Delegation) []finding.Finding {
 			continue
 		}
 		findings = append(findings, finding.New("SURF-NS-007", o.Target,
-			finding.ComputedEvidence("ns.host", ns.Host)))
+			finding.ComputedEvidence("ns.host", ns.Host)).
+			WithDescription("Specifically, the nameserver is `"+ns.Host+"`."))
 	}
 	return findings
 }

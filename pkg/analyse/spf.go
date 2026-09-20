@@ -95,12 +95,17 @@ func SPF(o Origin, records []string, hasMail bool) []finding.Finding {
 
 	if mechanism, ok := hasPTR(record); ok {
 		findings = append(findings, finding.New("SURF-SPF-008", target, ev,
-			finding.ComputedEvidence("spf.mechanism", mechanism)))
+			finding.ComputedEvidence("spf.mechanism", mechanism)).
+			WithDescription("Specifically, the mechanism is `"+mechanism+"`."))
 	}
 
 	for _, cidr := range broadRanges(record) {
+		// broadRanges already renders the prefix with its size, so the
+		// sentence quotes nothing: backticks around "10.0.0.0/8 (16777216
+		// addresses)" would mark the prose as though it were the term.
 		findings = append(findings, finding.New("SURF-SPF-011", target, ev,
-			finding.ComputedEvidence("spf.broad_range", cidr)))
+			finding.ComputedEvidence("spf.broad_range", cidr)).
+			WithDescription("Specifically, the range is "+cidr+"."))
 	}
 
 	return findings

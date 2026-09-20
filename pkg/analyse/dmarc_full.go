@@ -146,7 +146,9 @@ func DMARCFull(ctx context.Context, o Origin, r DMARCResolver, records []string,
 		if len(dmarcRecords(txts)) == 0 {
 			findings = append(findings, finding.New("SURF-DMARC-006", o.Target, ev,
 				finding.ComputedEvidence("dmarc.report_destination", dest),
-				finding.ComputedEvidence("dmarc.authorisation_record", name)))
+				finding.ComputedEvidence("dmarc.authorisation_record", name)).
+				WithDescription("Specifically, the destination is `"+dest+
+					"`, and no record was found at `"+name+"`."))
 		}
 	}
 
