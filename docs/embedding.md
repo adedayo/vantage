@@ -1,8 +1,8 @@
 # Embedding vantage
 
 vantage is a library first and a command second. The `vantage` binary is an
-ordinary consumer of the same interface described here — it holds no private
-hooks — so anything the CLI can do, an embedding tool can do.
+ordinary consumer of the same interface described here - it holds no private
+hooks - so anything the CLI can do, an embedding tool can do.
 
 This document is the contract. Everything in `pkg/audit` not described here
 should be treated as internal.
@@ -41,7 +41,7 @@ result, err := assessor.Assess(ctx, audit.Request{
 ```
 
 `Assessor` is narrow on purpose. Resolvers, timeouts and concurrency are
-constructor-time configuration, not part of the calling surface — and two
+constructor-time configuration, not part of the calling surface - and two
 methods are trivial to fake, which is what stops a consumer's tests reaching the
 network.
 
@@ -82,7 +82,7 @@ MTA-STS and subdomain-takeover paths.
 
 `vantage.Doer` is a one-method interface (`Do(*http.Request) (*http.Response, error)`),
 so `*http.Client` satisfies it and so does a guard of your own. Use
-`vantage.NewHTTPClient` if you want the library's defaults — TLS 1.2 floor, no
+`vantage.NewHTTPClient` if you want the library's defaults - TLS 1.2 floor, no
 redirects, keep-alives disabled.
 
 **No configurable state lives at package level.** Two assessors built under
@@ -92,7 +92,7 @@ observing the other's targets.
 ## A nil error does not mean everything succeeded
 
 `Assess` returns a non-nil error only when the run itself could not proceed. A
-check that fails is recorded against that check and the rest continue — one
+check that fails is recorded against that check and the rest continue - one
 unreachable nameserver must not deny you the other twenty answers.
 
 So a nil error means *the run completed*, not that everything worked. Inspect
@@ -106,13 +106,13 @@ Every check settles on exactly one of:
 | --- | --- |
 | `finding.StateOK` | Ran; the property was present |
 | `finding.StateNotFound` | Ran; the property was definitively absent |
-| `finding.StateNotChecked` | Did not run — filtered by profile, policy or `NoNetwork` |
+| `finding.StateNotChecked` | Did not run - filtered by profile, policy or `NoNetwork` |
 | `finding.StateCheckFailed` | Ran but could not reach a conclusion |
 
 The distinction between `not_found` and `check_failed` is the one that matters.
 The first is a measurement; the second is the *absence* of one. A consumer that
 maps these onto a boolean will report an unmeasured control as a passing
-control, which is the single most damaging thing a security tool can do — it
+control, which is the single most damaging thing a security tool can do - it
 converts an unknown into a reassurance.
 
 If you must map to your own vocabulary, map unknown states to your most
@@ -164,7 +164,7 @@ requests under different scopes cannot interfere.
 `surface`, `deep`), then `Only` to replace its membership, then `Skip`, which is
 applied last and always wins. `NoNetwork` excludes anything needing egress
 beyond DNS. An unknown name in `Only` or `Skip` is an error rather than a silent
-no-op — a caller who misspells a check name would otherwise believe they had
+no-op - a caller who misspells a check name would otherwise believe they had
 assessed something they had not.
 
 `Hosts` are additional names to examine for subdomain takeover. **Nothing is
@@ -236,7 +236,7 @@ quietly stops covering something the library now detects. Each
 gap is detectable without a second lookup.
 
 `GradeVersion` identifies the grading algorithm. Grades produced under different
-versions must never be compared as though equivalent — trend lines built across
+versions must never be compared as though equivalent - trend lines built across
 a version change are fiction.
 
 ### Reviewing egress before running
@@ -277,14 +277,14 @@ type RangeStore interface {
 ```
 
 `Get` returns the content **and when it was obtained**, at any age. Freshness is
-the caller's judgement, not the store's — for attribution, stale beats absent:
+the caller's judgement, not the store's - for attribution, stale beats absent:
 last week's ranges still name the right operator, whereas returning nothing
 would silently retract findings that were correct yesterday. When a fetch fails
 and cached data exists, vantage uses the cached data and discloses its age.
 
 There is no package-level cache, and this is not an oversight. A process-wide
 memo would let one assessment serve another the results of a third-party
-endpoint the second was never authorised to contact — a consent leak no
+endpoint the second was never authorised to contact - a consent leak no
 downstream guard could detect.
 
 ## Results
@@ -302,8 +302,8 @@ type Result struct {
 	Targets       []string
 	Summary       Summary
 	Findings      []Finding
-	Checks        []CheckResult // per-check state — read this
-	Errors        []CheckError  // per-check failures — and this
+	Checks        []CheckResult // per-check state - read this
+	Errors        []CheckError  // per-check failures - and this
 }
 ```
 
@@ -318,7 +318,7 @@ trust, so evidence is not optional decoration.
 **The catalogue is advisory.** Entries describe what to do when something is
 *not* right; there is no entry meaning "this control is correctly configured".
 Compliance is therefore assessed silence: a check in state `ok` or `not_found`
-that raised no findings. Do not look for a positive signal that does not exist —
+that raised no findings. Do not look for a positive signal that does not exist -
 and do not infer compliance from silence you have not confirmed was *assessed*,
 which is why `not_checked` and `check_failed` must stay distinct in your store.
 
@@ -337,7 +337,7 @@ type Observation struct {
 
 Read these rather than parsing rendered prose. Prose that is later reworded
 yields no match, and a consumer built on it then reports "nothing observed"
-instead of "I could not read this" — silence in the reassuring direction, which
+instead of "I could not read this" - silence in the reassuring direction, which
 is the failure mode worth designing out.
 
 `observation.Email` exists so that a consumer computing its own severity has
@@ -363,7 +363,7 @@ checks you asked for.
 
 Both methods take a `context.Context` and honour cancellation. A cancelled run
 returns whatever was completed alongside the context error. Record that as an
-abandoned assessment, not as a completed one — an interrupted scan that reads as
+abandoned assessment, not as a completed one - an interrupted scan that reads as
 a clean bill of health is worse than no scan.
 
 ## Versioning

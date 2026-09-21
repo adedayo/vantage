@@ -78,8 +78,8 @@ certificates have already published, subdomain takeover, and which providers
 and jurisdictions the infrastructure actually resolves into.
 
 Assessments are made from a vantage point, set with 'vantage audit --from'.
-Only the external vantage — the public internet, with no privileged position
-and no credentials — is implemented today.
+Only the external vantage - the public internet, with no privileged position
+and no credentials - is implemented today.
 
 Most evidence comes from DNS, which answers everybody. Certificate
 Transparency logs and provider address ranges are also consulted, and the

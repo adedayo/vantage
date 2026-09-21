@@ -38,6 +38,12 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # Advisory text is this library's product: read in a terminal, embedded
+      # in Trawl's interface, rendered into reports. Checks string literals and
+      # user documentation only, never comments.
+      - name: User-visible prose
+        run: go run ./tools/prosecheck
+
       - name: Test
         run: go test ./... -race -cover -covermode=atomic -coverprofile=coverage.out
 

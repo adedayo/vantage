@@ -6,7 +6,7 @@
 # Vantage
 
 **See what an attacker sees.** `vantage` audits the attack surface an
-organisation exposes, from the vantage point of someone looking at it — no
+organisation exposes, from the vantage point of someone looking at it - no
 agents, no credentials, and nothing touching the systems being assessed.
 
 Reconnaissance starts with DNS, because DNS answers everybody. Before an
@@ -19,26 +19,26 @@ you.
 
 Today every assessment is made from the **external** vantage: the public
 internet, with no privileged position. That is what `--from external`, the
-default, means. Internal vantages — what is exposed to someone who has already
-reached an internal network — are the direction of travel, not a current
+default, means. Internal vantages - what is exposed to someone who has already
+reached an internal network - are the direction of travel, not a current
 capability.
 
 It grades a domain A–F, explains every finding with the evidence behind it and
 the remediation that closes it, and emits JSON, NDJSON, CSV or SARIF for a
 pipeline.
 
-It runs on **Linux, macOS and Windows** — resolver configuration is discovered in
+It runs on **Linux, macOS and Windows** - resolver configuration is discovered in
 a platform-native way with graceful fallbacks, so no `/etc/resolv.conf` is
 required.
 
 > Some checks reach beyond DNS to corroborate what DNS implies: Certificate
 > Transparency logs, cloud provider range data, and the HTTPS policy files that
 > MTA-STS and subdomain takeover checks depend on. All of it is public, and
-> every check declares its egress — see [Network egress](#network-egress).
+> every check declares its egress - see [Network egress](#network-egress).
 
 ## Install
 
-**macOS and Linux — Homebrew**
+**macOS and Linux - Homebrew**
 
 ```sh
 brew install adedayo/tap/vantage
@@ -46,13 +46,13 @@ brew install adedayo/tap/vantage
 
 Upgrade with `brew upgrade vantage`.
 
-**Windows — winget**
+**Windows - winget**
 
 ```powershell
 winget install adedayo.vantage
 ```
 
-**Linux — distribution packages**
+**Linux - distribution packages**
 
 `.deb`, `.rpm`, `.apk` and Arch packages are attached to every release, so the
 binary is installed and removed by your package manager rather than left on
@@ -84,7 +84,7 @@ sudo pacman -U "vantage_${VERSION}_linux_${ARCH}.pkg.tar.zst"
 docker run --rm ghcr.io/adedayo/vantage:latest audit example.com
 ```
 
-The image is `distroless`, so it has no shell — `docker run ... sh` will not
+The image is `distroless`, so it has no shell - `docker run ... sh` will not
 work, by design. Provider ranges and Certificate Transparency results are
 cached inside the container and lost when it exits; mount a volume to keep
 them between runs:
@@ -140,7 +140,7 @@ This puts `vantage` in `$(go env GOPATH)/bin`, which needs to be on your `PATH`.
 Use `@v1.1.0` in place of `@latest` to pin a version.
 
 > Installing the command is not the same as depending on the Go packages. See
-> [Compatibility](#compatibility) — the CLI is the supported surface; `pkg/` is
+> [Compatibility](#compatibility) - the CLI is the supported surface; `pkg/` is
 > an implementation detail.
 
 ## Commands
@@ -188,8 +188,8 @@ promise.
 
 ## Findings and reporting
 
-By default a command retrieves and prints the record. Pass `--findings` — or any
-structured output format — to assess it instead:
+By default a command retrieves and prints the record. Pass `--findings` - or any
+structured output format - to assess it instead:
 
 ```sh
 vantage spf example.com                    # v=spf1 include:_spf.example.com ~all
@@ -237,13 +237,13 @@ vantage explain SURF-SPF-004
 ### Exit codes
 
 Exit codes are a contract, so a caller never has to parse output to learn what
-happened — and a resolver outage is never mistaken for a security finding:
+happened - and a resolver outage is never mistaken for a security finding:
 
 | Code | Meaning |
 |---|---|
 | 0 | Completed; nothing met the `--fail-on` threshold |
-| 1 | Runtime error — the tool could not do its job |
-| 2 | Usage error — bad flag or missing argument |
+| 1 | Runtime error - the tool could not do its job |
+| 2 | Usage error - bad flag or missing argument |
 | 3 | Completed; a finding met or exceeded `--fail-on` |
 | 4 | Completed, but one or more checks failed (partial result) |
 
@@ -269,7 +269,7 @@ enforce.
 
 That request is made to the target's own infrastructure, never to a third party.
 Redirects are refused and the certificate is validated, both required by
-RFC 8461 §3.2 — following a redirect would let whoever controls the hop rewrite
+RFC 8461 §3.2 - following a redirect would let whoever controls the hop rewrite
 the policy being audited.
 
 `--no-network` restricts a run to DNS. It does **not** silently drop MTA-STS:
@@ -293,9 +293,9 @@ say so in the report:
 
 - **`net`** attributes each address in the estate to a hosting provider, using
   the published address ranges of AWS, Google Cloud, Cloudflare and Fastly. It
-  reports addresses that should never appear in public DNS — RFC 1918 space,
+  reports addresses that should never appear in public DNS - RFC 1918 space,
   link-local, documentation ranges and the rest of the IANA special-purpose
-  registry — because publishing one discloses internal addressing to anyone who
+  registry - because publishing one discloses internal addressing to anyone who
   asks. Azure is not covered: its published range file is versioned by a URL
   that rotates weekly, so attribution would silently stop working whenever
   Microsoft moved it. Azure-hosted addresses are reported as unattributed
@@ -304,7 +304,7 @@ say so in the report:
 - **`ct`** enumerates hostnames from Certificate Transparency logs via
   Cert Spotter, falling back to crt.sh. Every name a certificate has ever been
   issued for is already public; the check reads that record and asks which of
-  those names still resolve. It is **opt-in** — pass `--enumerate` — because it
+  those names still resolve. It is **opt-in** - pass `--enumerate` - because it
   queries a third party and because the answer is an inventory rather than a
   verdict.
 
@@ -336,8 +336,8 @@ vantage audit example.com --pivot
 ```
 
 Discovered domains are reported as `SURF-CT-004`, at informational severity. The
-inference is not proof — shared hosting can bundle unrelated customers onto one
-certificate — so relations are only drawn from certificates small enough for
+inference is not proof - shared hosting can bundle unrelated customers onto one
+certificate - so relations are only drawn from certificates small enough for
 co-tenancy to mean something, and the walk is bounded:
 
 | Flag | Purpose |
@@ -348,7 +348,7 @@ co-tenancy to mean something, and the walk is bounded:
 
 Raising `--pivot-max-sans` finds more relations and admits more neighbours who
 merely shared a certificate. **Only pivot against domains you are authorised to
-assess** — the flag will happily walk into estates that are not yours, and the
+assess** - the flag will happily walk into estates that are not yours, and the
 tool cannot tell the difference.
 
 ### Caches
@@ -362,14 +362,14 @@ Provider ranges and CT results are cached under `~/.cache/vantage`
 | Certificate Transparency results | `ct/` | 24 hours |
 
 If a source is unreachable and a stale entry exists, the stale entry is used and
-the report says when it was fetched — an old answer that discloses its age is
+the report says when it was fetched - an old answer that discloses its age is
 more use than no answer at all. Delete the directory to force a refresh.
 
 Where an operator publishes more than one equivalent endpoint, each is tried in
 turn, so a single URL being withdrawn does not remove that provider's coverage.
 Attribution results carry a `provenance:` record naming the endpoint used and
 the date the data was obtained, because an attribution can change when this
-tool's data is refreshed rather than when the domain changes — a distinction
+tool's data is refreshed rather than when the domain changes - a distinction
 that matters when comparing two runs.
 
 ## Authority to assess
@@ -386,7 +386,7 @@ going through a resolver:
   resolve a foreign name, to see whether it is an open resolver.
 - **`tko`** follows the alias chain of each host you name and checks whether
   its target still exists. It never claims a resource, and it never guesses
-  hostnames — it assesses the apex plus whatever you supply:
+  hostnames - it assesses the apex plus whatever you supply:
 
 ```sh
 vantage audit example.com --checks tko --hosts www.example.com,assets.example.com
@@ -403,7 +403,7 @@ vantage audit example.com --checks tko --hosts-file hosts.txt
 
 If no server answers at all, the check reports **`check_failed`**, not a clean
 result: a zone that could not be tested is never reported as one that passed.
-That happens more often than you might expect — some nameservers accept the TCP
+That happens more often than you might expect - some nameservers accept the TCP
 connection and answer ordinary queries but silently drop AXFR, and outbound
 TCP/53 is filtered on many corporate networks. The report lists every server
 tried and what each one said, so you can tell the difference.
@@ -439,7 +439,7 @@ audit. Truncated UDP responses are automatically retried over TCP.
 
 ## Timeouts
 
-Two budgets bound every lookup. The defaults favour **fast failover** — a dead
+Two budgets bound every lookup. The defaults favour **fast failover** - a dead
 nameserver is abandoned after 2 seconds rather than stalling the audit.
 
 | Budget | Scope | Default | Flag | Environment variable |
@@ -468,8 +468,8 @@ total timeout always wins.
 ## Library
 
 `vantage` is a library first and a command second. The `vantage` binary is an
-ordinary consumer of the same interface an embedding tool uses — it holds no
-private hooks — so anything the CLI can do, your code can do.
+ordinary consumer of the same interface an embedding tool uses - it holds no
+private hooks - so anything the CLI can do, your code can do.
 
 The entry point is `audit.Assessor`: ask what the library can assess, then ask
 it to assess some of that.
@@ -535,8 +535,8 @@ including in patch releases. Reach them through `audit.Assessor` and you are on
 the supported path; import them directly and you should pin a commit.
 
 That split is the trade. Freezing every exported symbol would slow the work that
-makes the tool useful; freezing the surface an embedder actually needs — which
-is small, and was designed to be — costs little and protects the people building
+makes the tool useful; freezing the surface an embedder actually needs - which
+is small, and was designed to be - costs little and protects the people building
 on it. New finding identifiers may appear in a minor release, which is why a
 consumer's mapping should be derived from `Catalogue` and validated in CI rather
 than maintained by hand.
@@ -556,7 +556,7 @@ GOOS=windows go build ./...
 
 ### Pre-release verification
 
-`pre-release.sh` runs the full local quality gate — module tidiness, `gofmt`,
+`pre-release.sh` runs the full local quality gate - module tidiness, `gofmt`,
 `go vet`, `golangci-lint`, tests with the race detector and coverage,
 cross-platform builds for Linux/macOS/Windows (amd64 and arm64), and an offline
 CLI smoke test:
@@ -579,7 +579,7 @@ golangci-lint is configured in [`.golangci.yml`](.golangci.yml); install it with
 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 ```
 
-[GoReleaser](https://goreleaser.com) is optional but recommended — `pre-release.sh`
+[GoReleaser](https://goreleaser.com) is optional but recommended - `pre-release.sh`
 validates [`.goreleaser.yml`](.goreleaser.yml) when it is on `PATH`:
 
 ```sh
@@ -603,7 +603,7 @@ DRY_RUN=1 ./release.sh patch    # show what would happen, change nothing
 It refuses to run if the tag already exists locally or on the remote, and if the
 working tree is dirty (unless `ALLOW_DIRTY=1`, which folds the changes into the
 release commit). The tag is annotated with the commit subjects since the previous
-release, and publication is handled by `goreleaser`, then `gh`, then CI —
+release, and publication is handled by `goreleaser`, then `gh`, then CI -
 whichever is available first.
 
 Pushing a `vX.Y.Z` tag triggers
@@ -614,7 +614,7 @@ test suite and then GoReleaser. Each release ships:
   `amd64` and `arm64` (`tar.gz`, or `zip` on Windows).
 - A `checksums.txt` file with SHA-256 digests of every archive.
 - An SBOM per archive, generated with [syft](https://github.com/anchore/syft).
-- Version, commit and build date baked into the binary — check with
+- Version, commit and build date baked into the binary - check with
   `vantage version`.
 
 Local `goreleaser` runs skip SBOM generation automatically when syft is not

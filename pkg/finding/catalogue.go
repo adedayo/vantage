@@ -192,8 +192,8 @@ var catalogue = index([]Entry{
 		Description: "A single TXT string exceeds 255 octets, or the record as a whole exceeds 512 " +
 			"octets. Over-long records are split inconsistently by DNS interfaces and can push a " +
 			"response beyond the size some resolvers will accept over UDP.",
-		Remediation: "Shorten the record — usually by consolidating address ranges or removing unused " +
-			"senders — or split long values into correctly concatenated 255-octet TXT strings.",
+		Remediation: "Shorten the record - usually by consolidating address ranges or removing unused " +
+			"senders - or split long values into correctly concatenated 255-octet TXT strings.",
 		References: []string{"https://www.rfc-editor.org/rfc/rfc7208#section-3.3"},
 		Tags:       []string{TagEmailAuth},
 	},
@@ -204,8 +204,8 @@ var catalogue = index([]Entry{
 		Severity:   SeverityMedium,
 		Confidence: ConfidenceMedium,
 		Description: "The record authorises an IP range wider than a /16 (IPv4) or /32 (IPv6). Any host " +
-			"within that range — including systems you do not control, such as other tenants of a " +
-			"shared hosting provider — can send authenticated mail as this domain.",
+			"within that range - including systems you do not control, such as other tenants of a " +
+			"shared hosting provider - can send authenticated mail as this domain.",
 		Remediation: "Narrow the range to the specific addresses your mail infrastructure uses, or " +
 			"replace it with an `include:` of your provider's maintained SPF record.",
 		References: []string{"https://www.rfc-editor.org/rfc/rfc7208#section-5.6"},
@@ -275,8 +275,8 @@ var catalogue = index([]Entry{
 		Description: "The record has no `rua` tag, so no aggregate reports are sent. You have no " +
 			"visibility of who is sending mail as your domain, and no evidence base for tightening " +
 			"the policy safely.",
-		Remediation: "Add `rua=mailto:<address>` — ideally a dedicated mailbox or a DMARC reporting " +
-			"service — and review the reports before enforcing.",
+		Remediation: "Add `rua=mailto:<address>` - ideally a dedicated mailbox or a DMARC reporting " +
+			"service - and review the reports before enforcing.",
 		References: []string{"https://www.rfc-editor.org/rfc/rfc7489#section-7.1"},
 		Tags:       []string{TagEmailAuth, TagNCSCMailCheck},
 	},
@@ -314,7 +314,7 @@ var catalogue = index([]Entry{
 		Title:      "DMARC record is syntactically invalid",
 		Severity:   SeverityHigh,
 		Confidence: ConfidenceHigh,
-		Description: "The record could not be parsed as valid DMARC — for example a missing or " +
+		Description: "The record could not be parsed as valid DMARC - for example a missing or " +
 			"misplaced `p` tag, or an unrecognised policy value. Receivers will discard it, leaving " +
 			"the domain unprotected despite a record being present.",
 		Remediation: "Correct the record syntax. The `v=DMARC1` tag must come first and `p` must be " +
@@ -329,7 +329,7 @@ var catalogue = index([]Entry{
 		Severity:   SeverityInfo,
 		Confidence: ConfidenceHigh,
 		Description: "This name publishes no DMARC record of its own. Receivers fall back to the " +
-			"organisational domain's policy, as RFC 7489 specifies, so the name is covered — but by " +
+			"organisational domain's policy, as RFC 7489 specifies, so the name is covered - but by " +
 			"a policy defined elsewhere, which may be changed or tightened without reference to " +
 			"this subdomain.",
 		Remediation: "No action is required if the inherited policy is intended. Publish a record at " +
@@ -550,7 +550,7 @@ var catalogue = index([]Entry{
 		Confidence: ConfidenceHigh,
 		Description: "The policy contains `issue` but no `issuewild`. Under RFC 8659 an absent " +
 			"`issuewild` means wildcard issuance falls back to the `issue` policy, which is usually " +
-			"intended — but if the intent was to forbid wildcards, that is not what is published.",
+			"intended - but if the intent was to forbid wildcards, that is not what is published.",
 		Remediation: "Add an explicit `issuewild` property. Use `0 issuewild \";\"` to forbid " +
 			"wildcard certificates entirely, or name the permitted CAs.",
 		References: []string{"https://www.rfc-editor.org/rfc/rfc8659#section-4.3"},
@@ -606,7 +606,7 @@ var catalogue = index([]Entry{
 		Confidence: ConfidenceHigh,
 		Description: "No `_mta-sts` TXT record was found. Without MTA-STS, SMTP connections to this " +
 			"domain's mail exchangers fall back to opportunistic TLS, which an attacker positioned " +
-			"in the network path can strip — downgrading mail to plaintext with no warning to " +
+			"in the network path can strip - downgrading mail to plaintext with no warning to " +
 			"either party.",
 		Remediation: "Publish `v=STSv1; id=<timestamp>` at `_mta-sts.<domain>` and serve a policy " +
 			"file at `https://mta-sts.<domain>/.well-known/mta-sts.txt`, starting in testing mode.",
@@ -707,7 +707,7 @@ var catalogue = index([]Entry{
 		Confidence: ConfidenceHigh,
 		Description: "The policy host's TLS certificate did not validate. RFC 8461 requires senders " +
 			"to reject a policy that is not served over a validated HTTPS connection, so the policy " +
-			"is inert — and the failure looks identical to the domain simply having no policy.",
+			"is inert - and the failure looks identical to the domain simply having no policy.",
 		Remediation: "Install a certificate valid for `mta-sts.<domain>` from a publicly trusted CA, " +
 			"and ensure the full chain is served.",
 		References: []string{"https://www.rfc-editor.org/rfc/rfc8461#section-3.3"},
@@ -764,7 +764,7 @@ var catalogue = index([]Entry{
 		Description: "The zone publishes neither DNSKEY records nor a DS record at its parent, so " +
 			"its DNS answers carry no cryptographic authentication. A resolver has no way to detect " +
 			"forged answers, leaving the domain exposed to cache poisoning and on-path DNS " +
-			"manipulation — which in turn undermines every control that depends on DNS, including " +
+			"manipulation - which in turn undermines every control that depends on DNS, including " +
 			"certificate issuance and mail routing.",
 		Remediation: "Enable DNSSEC signing at your DNS provider and publish the resulting DS record " +
 			"through your registrar. Most managed providers now do both in one step; verify " +
@@ -799,8 +799,8 @@ var catalogue = index([]Entry{
 		Severity:   SeverityCritical,
 		Confidence: ConfidenceHigh,
 		Description: "The parent zone delegates trust to a key the zone does not publish, so the " +
-			"chain of trust is broken. Validating resolvers — which now serve a substantial share " +
-			"of users — return SERVFAIL for every name in the zone. This is not a weakness but an " +
+			"chain of trust is broken. Validating resolvers - which now serve a substantial share " +
+			"of users - return SERVFAIL for every name in the zone. This is not a weakness but an " +
 			"outage: the domain is unreachable for those users, while resolving perfectly for " +
 			"everyone else, so it often goes undiagnosed for a long time.",
 		Remediation: "Restore the DNSKEY the DS refers to, or update the DS at the registrar to " +
@@ -865,7 +865,7 @@ var catalogue = index([]Entry{
 		Description: "Authenticated denial of existence uses NSEC, whose records chain every name " +
 			"in the zone together. An observer can walk the chain and enumerate the complete " +
 			"contents of the zone, including internal hostnames that were never meant to be " +
-			"discoverable — useful reconnaissance for an attacker mapping the estate.",
+			"discoverable - useful reconnaissance for an attacker mapping the estate.",
 		Remediation: "Switch to NSEC3 with zero extra iterations and no salt, per RFC 9276. Note " +
 			"that NSEC3 raises the cost of enumeration rather than preventing it, so names that " +
 			"must stay private should not be in a public zone at all.",
@@ -914,8 +914,8 @@ var catalogue = index([]Entry{
 		Severity:   SeverityLow,
 		Confidence: ConfidenceHigh,
 		Description: "Every possible subdomain of this domain advertises a mail exchanger. Mail addressed " +
-			"to names that were never provisioned — including names an attacker invents for a phishing " +
-			"pretext — is accepted and delivered somewhere, and the domain's mail authentication posture " +
+			"to names that were never provisioned - including names an attacker invents for a phishing " +
+			"pretext - is accepted and delivered somewhere, and the domain's mail authentication posture " +
 			"must therefore hold for subdomains nobody has reviewed.",
 		Remediation: "Publish MX records only for the subdomains that receive mail, and publish the null MX " +
 			"of RFC 7505 (`0 .`) for those that do not.",
@@ -964,7 +964,7 @@ var catalogue = index([]Entry{
 		Description: "Every authoritative nameserver for the zone sits under one registrable domain, so " +
 			"one operator carries the whole delegation. If that operator suffers an outage, a " +
 			"large-scale attack, a billing lapse or a compromise, the domain leaves the internet with " +
-			"it — and no change can be published in the meantime, because publishing changes is the " +
+			"it - and no change can be published in the meantime, because publishing changes is the " +
 			"very thing that has failed. A single reputable provider is the normal and usually " +
 			"correct arrangement, so this is an observation for organisations whose availability " +
 			"requirements justify a second one, not a defect.",
@@ -987,8 +987,8 @@ var catalogue = index([]Entry{
 		Description: "Every authoritative nameserver resolves into one IPv4 /24. The redundancy is " +
 			"nominal: a single routing failure, subnet outage or filtering decision removes all of " +
 			"them at once, which is the condition redundant nameservers exist to prevent.",
-		Remediation: "Place authoritative nameservers in distinct networks — ideally distinct providers " +
-			"and distinct autonomous systems — so that no single failure removes them all.",
+		Remediation: "Place authoritative nameservers in distinct networks - ideally distinct providers " +
+			"and distinct autonomous systems - so that no single failure removes them all.",
 		References: []string{"https://www.rfc-editor.org/rfc/rfc2182#section-3.1"},
 		Tags:       []string{TagResilience, TagNIST80081},
 	},
@@ -1011,12 +1011,12 @@ var catalogue = index([]Entry{
 	{
 		ID:         "SURF-NS-005",
 		Check:      "ns",
-		Title:      "Lame delegation — nameserver does not answer authoritatively",
+		Title:      "Lame delegation - nameserver does not answer authoritatively",
 		Severity:   SeverityHigh,
 		Confidence: ConfidenceHigh,
 		Description: "A nameserver named in the delegation does not answer authoritatively for the zone. " +
 			"Resolvers distribute queries across the published set, so a proportion of lookups are " +
-			"delayed or fail outright — an intermittent, hard-to-diagnose outage that gets blamed on " +
+			"delayed or fail outright - an intermittent, hard-to-diagnose outage that gets blamed on " +
 			"almost anything except DNS.",
 		Remediation: "Either configure the server to serve the zone, or remove it from both the zone's NS " +
 			"records and the parent's delegation.",
@@ -1045,8 +1045,8 @@ var catalogue = index([]Entry{
 		Severity:   SeverityHigh,
 		Confidence: ConfidenceHigh,
 		Description: "The nameserver resolved a name it is not authoritative for on behalf of an arbitrary " +
-			"client. Open resolvers are the raw material of DNS amplification attacks — a small spoofed " +
-			"query returns a large answer to the victim — and they also expose the server's cache to " +
+			"client. Open resolvers are the raw material of DNS amplification attacks - a small spoofed " +
+			"query returns a large answer to the victim - and they also expose the server's cache to " +
 			"poisoning.",
 		Remediation: "Separate the roles: authoritative servers should refuse recursion entirely, and " +
 			"recursive resolvers should serve only known clients.",
@@ -1064,7 +1064,7 @@ var catalogue = index([]Entry{
 		Confidence: ConfidenceMedium,
 		Description: "The authoritative servers returned different SOA serials, so they are serving " +
 			"different versions of the zone. This is normal for a few moments after a change and a " +
-			"symptom of broken replication if it persists — during which a resolver's answer depends " +
+			"symptom of broken replication if it persists - during which a resolver's answer depends " +
 			"on which server it happened to ask.",
 		Remediation: "If the difference persists, check zone transfers between the primary and its " +
 			"secondaries: NOTIFY delivery, transfer ACLs and the SOA refresh and retry timers.",
@@ -1081,7 +1081,7 @@ var catalogue = index([]Entry{
 		Confidence: ConfidenceHigh,
 		Description: "The name is aliased to a third-party service, and the target does not exist. On " +
 			"this service an unclaimed name can be registered by anybody, so an attacker can claim it " +
-			"and serve content from a hostname that carries your organisation's brand — collecting " +
+			"and serve content from a hostname that carries your organisation's brand - collecting " +
 			"session cookies scoped to the parent domain, obtaining a valid certificate, and passing " +
 			"every check a user is taught to perform.",
 		Remediation: "Remove the CNAME record now: deletion is instant and costs nothing, whereas the " +
@@ -1121,8 +1121,8 @@ var catalogue = index([]Entry{
 		Severity:   SeverityMedium,
 		Confidence: ConfidenceLow,
 		Description: "The name is aliased to a third-party service whose targets always resolve, whether " +
-			"or not the name is still claimed. This is not evidence of a defect — the service is most " +
-			"likely in use — but the one case that matters, an abandoned name on a provider that lets " +
+			"or not the name is still claimed. This is not evidence of a defect - the service is most " +
+			"likely in use - but the one case that matters, an abandoned name on a provider that lets " +
 			"anybody re-register it, is indistinguishable from normal operation without inspecting the " +
 			"HTTP response.",
 		Remediation: "Confirm the service is still yours and still needed, and remove the alias if it is " +
@@ -1139,7 +1139,7 @@ var catalogue = index([]Entry{
 		Severity:   SeverityHigh,
 		Confidence: ConfidenceHigh,
 		Description: "The name is aliased to a target that returns NXDOMAIN, so the alias is broken. The " +
-			"service is unrecognised, so whether it can be claimed by a third party is unknown — but " +
+			"service is unrecognised, so whether it can be claimed by a third party is unknown - but " +
 			"if the target's domain is ever registered, whoever registers it inherits this name.",
 		Remediation: "Remove the alias if the service is retired. If it is not, find out why the target no " +
 			"longer resolves: an expired registration on the target's own domain would make this " +
@@ -1172,7 +1172,7 @@ var catalogue = index([]Entry{
 	{
 		ID:         "SURF-AXFR-001",
 		Check:      "axfr",
-		Title:      "Zone transfer permitted — the entire zone is disclosed",
+		Title:      "Zone transfer permitted - the entire zone is disclosed",
 		Severity:   SeverityHigh,
 		Confidence: ConfidenceHigh,
 		Description: "An authoritative nameserver performed a zone transfer for an anonymous client, " +
@@ -1193,12 +1193,12 @@ var catalogue = index([]Entry{
 	{
 		ID:         "SURF-AXFR-002",
 		Check:      "axfr",
-		Title:      "Zone transfer partially permitted — zone metadata disclosed",
+		Title:      "Zone transfer partially permitted - zone metadata disclosed",
 		Severity:   SeverityMedium,
 		Confidence: ConfidenceHigh,
 		Description: "A nameserver began a zone transfer for an anonymous client but disclosed only the " +
 			"zone's metadata rather than its contents. The serial number and the primary server's " +
-			"identity are revealed, and the transfer policy is evidently not what it should be — the " +
+			"identity are revealed, and the transfer policy is evidently not what it should be - the " +
 			"same misconfiguration may disclose the full zone from another server or after a change.",
 		Remediation: "Restrict AXFR and IXFR to the secondary servers that need them, by IP address and " +
 			"preferably with TSIG authentication, on every authoritative server for the zone.",
@@ -1220,7 +1220,7 @@ var catalogue = index([]Entry{
 			"apex or mail infrastructure. Using more than one provider is often deliberate and " +
 			"sometimes prudent, so this is an inventory observation rather than a defect. It is " +
 			"reported because it is also how shadow IT, abandoned migrations and marketing systems " +
-			"nobody owns appear in DNS — each of them a name under the organisation's domain whose " +
+			"nobody owns appear in DNS - each of them a name under the organisation's domain whose " +
 			"lifecycle nobody is managing.",
 		Remediation: "Confirm the host is a service the organisation still uses and still owns. If it " +
 			"is not, remove the record: a name pointing at infrastructure nobody manages is the " +
@@ -1237,7 +1237,7 @@ var catalogue = index([]Entry{
 		Severity:   SeverityMedium,
 		Confidence: ConfidenceHigh,
 		Description: "A name published in the public DNS resolves to an address that is not routable on " +
-			"the internet — RFC 1918 private space, carrier-grade NAT space, or link-local. The " +
+			"the internet - RFC 1918 private space, carrier-grade NAT space, or link-local. The " +
 			"record discloses part of the organisation's internal addressing plan to anybody who " +
 			"asks, which is useful reconnaissance for an attacker who later gets a foothold, and it " +
 			"does not work for external users, so it is usually a split-horizon configuration that " +
@@ -1306,7 +1306,7 @@ var catalogue = index([]Entry{
 			"of its staging systems, management interfaces and internal tooling without sending it a " +
 			"single packet. The names are grouped by the keyword that gave them away, because what " +
 			"leaks is the naming convention rather than any single host, and all of them are listed " +
-			"in the evidence. The judgement rests on that keyword, so confirm it before acting — a " +
+			"in the evidence. The judgement rests on that keyword, so confirm it before acting - a " +
 			"name containing 'test' may well be a production service.",
 		Remediation: "Where internal systems need certificates, issue them from an internal CA rather " +
 			"than a publicly trusted one, or use a wildcard so individual hostnames are never " +
@@ -1348,8 +1348,8 @@ var catalogue = index([]Entry{
 			"assessed, which usually means one organisation controls both: a certificate authority " +
 			"was asked to certify them together, and whoever held the private key controlled every " +
 			"name on it. They have been assessed alongside the domain given. The inference is not " +
-			"proof of common ownership — shared hosting can bundle unrelated customers onto one " +
-			"certificate — so the list is drawn only from certificates small enough for co-tenancy " +
+			"proof of common ownership - shared hosting can bundle unrelated customers onto one " +
+			"certificate - so the list is drawn only from certificates small enough for co-tenancy " +
 			"to be meaningful.",
 		Remediation: "Confirm each domain belongs to the organisation and is covered by the same " +
 			"security expectations as the primary estate. Domains that are genuinely yours but " +

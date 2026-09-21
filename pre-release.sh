@@ -96,6 +96,16 @@ go vet ./... || fail "go vet reported problems."
 ok "go vet is clean"
 
 # ---------------------------------------------------------------------------
+step "User-visible prose"
+# ---------------------------------------------------------------------------
+# Advisory text is this library's product. It is read in a terminal, embedded
+# in Trawl's interface and rendered into reports, so its punctuation has to
+# survive all three. Checks string literals and user documentation only, never
+# comments.
+go run ./tools/prosecheck || fail "Em dashes found in user-visible text. Run 'go run ./tools/prosecheck --fix'."
+ok "No em dashes in user-visible text"
+
+# ---------------------------------------------------------------------------
 step "golangci-lint"
 # ---------------------------------------------------------------------------
 if [[ "${SKIP_LINT:-0}" == "1" ]]; then

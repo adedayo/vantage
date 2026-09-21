@@ -241,8 +241,8 @@ func specialFindings(
 			finding.New("SURF-NET-002", o.Target, evidence...).
 				WithConfidence(finding.ConfidenceLow).
 				WithDescription("The name resolves to an address that goes nowhere. This is " +
-					"often deliberate — null-routing a name that must exist without pointing " +
-					"it at a host — and is reported for confirmation rather than as a defect."),
+					"often deliberate - null-routing a name that must exist without pointing " +
+					"it at a host - and is reported for confirmation rather than as a defect."),
 		}
 	case netattr.CategoryDocumentation, netattr.CategoryReserved:
 		return []finding.Finding{
@@ -325,7 +325,7 @@ func NetworkRecords(obs NetworkObservation) []string {
 				// Not "unattributed": that asserts the address belongs to no
 				// known provider, which is precisely what could not be
 				// established while a source was missing.
-				line += " (not attributed — coverage incomplete)"
+				line += " (not attributed - coverage incomplete)"
 			default:
 				line += " (unattributed)"
 			}
