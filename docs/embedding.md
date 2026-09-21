@@ -264,6 +264,68 @@ check names. Naming checks in configuration means a newly added intrusive check
 runs by default; filtering on declared egress means it is excluded until
 somebody consents to what it does.
 
+## Probing declared services
+
+Service probes are exposed separately from DNS assessment through
+`probe.Prober`. A request must name its target and protocol layer; a TCP result
+is never promoted to TLS or HTTP evidence.
+
+```go
+prober := probe.ServiceProber{Profile: probe.Profile{
+	Name:           "declared-services",
+	MaxConcurrency: 4,
+	MaxProbes:      20,
+	Allow: func(target probe.Target) error {
+		return scope.Allow(target.Host, target.Port)
+	},
+}}
+
+observations := prober.ProbeMany(ctx, []probe.Request{
+	{Target: probe.Target{Host: "mail.example.com", Port: 443, Protocol: "https"},
+		Layer: observation.ServiceLayerTLS},
+})
+```
+
+The scope guard runs before the dialer or HTTP client. A denied target produces
+an `unknown` observation and zero network requests. The profile also bounds
+parallelism and total probes; cancelled, denied and over-budget requests never
+read as `not_responding`.
+
+### Common and non-standard services
+
+`probe.CommonServices()` returns curated TCP-oriented declarations for likely
+useful services, including web, mail, database, remote-access and infrastructure
+ports. `probe.RequestsForProfile(host, probe.DiscoveryMostCommon)` provides the
+fast recurring sweep, while `probe.DiscoveryExtended` adds the broader
+high-impact set. `probe.RankedServices(n)` remains available when a caller
+needs an exact bound. The catalogue is metadata only and does not scan
+anything. Select declarations authorised for the target, then convert them to
+requests:
+
+```go
+requests, err := probe.RequestsForProfile("example.com", probe.DiscoveryMostCommon)
+```
+
+For attack-surface discovery, where the service is not known in advance, use
+`probe.RankedRequests(host, n)` for a discovered and authorised host. This is a
+bounded candidate pass: start with the highest-priority services, retain the
+service name in each resulting observation, and expand the limit only under an
+operator-approved policy. It does not discover arbitrary hostnames, CIDRs or
+ports by itself.
+
+Operator-specific ports use `probe.CustomService`:
+
+```go
+internalHTTPS, err := probe.CustomService(
+	"internal-dashboard", 9443, "tcp", "https",
+	observation.ServiceLayerHTTP, "Operator-specific HTTPS service",
+)
+```
+
+The catalogue does not attempt to reproduce an external scanner's ranking
+database. It provides a reviewable starting point while leaving target choice,
+scope and request budgets with the embedding consumer.
+
 ## Sharing downloaded reference data
 
 Provider address ranges are several megabytes and change slowly. `WithRangeStore`

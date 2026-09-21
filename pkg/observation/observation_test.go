@@ -143,3 +143,34 @@ func TestNetworkObservationRoundTripsThroughJSON(t *testing.T) {
 		t.Fatalf("failed sources = %v, want [gcp]", got.FailedSources)
 	}
 }
+
+func TestServiceObservationRoundTripsThroughJSON(t *testing.T) {
+	original := observation.ServiceObservation{
+		Host: "mail.example.test", Port: 443, Transport: "tcp", Protocol: "https",
+		Service: "https",
+		Layer:   observation.ServiceLayerTLS, State: observation.ServiceResponding,
+		Evidence: observation.ServiceEvidence{
+			Address: "203.0.113.7:443", TLSVersion: "TLS 1.3",
+			CipherSuite: "TLS_AES_128_GCM_SHA256", SNI: "mail.example.test",
+			HTTPStatus: 200, Server: "bounded-server-value",
+		},
+		ObservedAt:   time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC),
+		ProbeProfile: "declared-services",
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var got observation.ServiceObservation
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.State != observation.ServiceResponding || got.Layer != observation.ServiceLayerTLS || got.Service != "https" {
+		t.Fatalf("service state/layer = %q/%q", got.State, got.Layer)
+	}
+	if got.Evidence.TLSVersion != "TLS 1.3" || got.Evidence.HTTPStatus != 200 {
+		t.Fatalf("service evidence did not survive the round trip: %+v", got.Evidence)
+	}
+}

@@ -3,6 +3,11 @@
 Specs `002`–`008` are implemented. Specs `009`–`015` are proposed and are
 sequenced below, because the dependencies between them are strict.
 
+Spec `016` is proposed after structured observations. It is the service
+reachability and protocol-observation capability that lets embedding consumers
+retire separate raw-packet and TLS-audit engines without making raw-packet
+privileges part of the default library path.
+
 ## Dependency graph
 
 ```
@@ -11,6 +16,7 @@ sequenced below, because the dependencies between them are strict.
                             ├──> 011 deep analysis      └──> 014 agentic readiness
                             │
                             └──> 012 attack surface ──> 015 structured observations
+015 structured observations ──> 016 service reachability and protocol observations
 ```
 
 `009` is foundational: it replaces string output with a findings model, so every

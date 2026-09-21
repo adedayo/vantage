@@ -112,6 +112,56 @@ type CT struct {
 	Discovered int `json:"discovered"`
 }
 
+// ServiceState describes what a declared service probe established.
+type ServiceState string
+
+const (
+	ServiceResponding    ServiceState = "responding"
+	ServiceNotResponding ServiceState = "not_responding"
+	ServiceUnknown       ServiceState = "unknown"
+)
+
+// ServiceLayer is the protocol layer a probe was asked to assess.
+type ServiceLayer string
+
+const (
+	ServiceLayerTCP      ServiceLayer = "tcp"
+	ServiceLayerTLS      ServiceLayer = "tls"
+	ServiceLayerHTTP     ServiceLayer = "http"
+	ServiceLayerStartTLS ServiceLayer = "starttls"
+)
+
+// ServiceEvidence contains bounded facts gathered by a service probe. Empty
+// fields mean that the requested probe did not establish that fact.
+type ServiceEvidence struct {
+	Address            string `json:"address,omitempty"`
+	ResponseClass      string `json:"response_class,omitempty"`
+	TLSVersion         string `json:"tls_version,omitempty"`
+	CipherSuite        string `json:"cipher_suite,omitempty"`
+	CertificateSubject string `json:"certificate_subject,omitempty"`
+	CertificateIssuer  string `json:"certificate_issuer,omitempty"`
+	CertificateExpiry  string `json:"certificate_expiry,omitempty"`
+	SNI                string `json:"sni,omitempty"`
+	HTTPStatus         int    `json:"http_status,omitempty"`
+	Server             string `json:"server,omitempty"`
+	Error              string `json:"error,omitempty"`
+}
+
+// ServiceObservation is the structured result of one declared service probe.
+// A lower-layer response does not imply that a higher-layer probe responded.
+type ServiceObservation struct {
+	Host         string          `json:"host"`
+	Port         uint16          `json:"port"`
+	Transport    string          `json:"transport"`
+	Protocol     string          `json:"protocol"`
+	Service      string          `json:"service,omitempty"`
+	Layer        ServiceLayer    `json:"layer"`
+	State        ServiceState    `json:"state"`
+	Evidence     ServiceEvidence `json:"evidence"`
+	ObservedAt   time.Time       `json:"observed_at"`
+	ProbeProfile string          `json:"probe_profile"`
+}
+
 // SameBasis reports whether two sets of provenance describe the same data,
 // disregarding when it was fetched.
 //
