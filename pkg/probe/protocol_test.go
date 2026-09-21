@@ -51,6 +51,25 @@ func TestHTTPReportsMetadataWithoutBody(t *testing.T) {
 	}
 }
 
+func TestHTTPSReportsTLSAndHSTSEvidence(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		writer.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	host, port := splitAddress(t, server.Listener.Addr().String())
+	result := probe.HTTP(context.Background(), probe.Target{Host: host, Port: port, Protocol: "https"}, probe.HTTPOptions{
+		Client: server.Client(),
+	})
+	if result.State != observation.ServiceResponding {
+		t.Fatalf("state = %q, want responding: %+v", result.State, result)
+	}
+	if result.Evidence.HSTS == "" || result.Evidence.TLSVersion == "" || result.Evidence.CipherSuite == "" {
+		t.Fatalf("missing HTTPS evidence: %+v", result.Evidence)
+	}
+}
+
 func TestTLSHandshakeFailureRemainsUnknown(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer server.Close()

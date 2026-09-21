@@ -143,6 +143,8 @@ type ServiceEvidence struct {
 	CertificateExpiry  string `json:"certificate_expiry,omitempty"`
 	SNI                string `json:"sni,omitempty"`
 	HTTPStatus         int    `json:"http_status,omitempty"`
+	HSTS               string `json:"hsts,omitempty"`
+	Location           string `json:"location,omitempty"`
 	Server             string `json:"server,omitempty"`
 	Error              string `json:"error,omitempty"`
 }
